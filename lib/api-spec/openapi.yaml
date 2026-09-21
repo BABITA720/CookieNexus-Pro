@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: nexus
+    description: CookieNexus dashboard and chain adapter operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,120 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /nexus/overview:
+    get:
+      operationId: getNexusOverview
+      tags: [nexus]
+      summary: Get the CookieNexus dashboard overview
+      responses:
+        "200":
+          description: Dashboard overview
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NexusOverview"
+  /nexus/markets:
+    get:
+      operationId: getNexusMarkets
+      tags: [nexus]
+      summary: Get featured markets and pools
+      responses:
+        "200":
+          description: Featured market data
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Market"
+  /nexus/activity:
+    get:
+      operationId: getNexusActivity
+      tags: [nexus]
+      summary: Get recent wallet activity
+      responses:
+        "200":
+          description: Recent activity
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Activity"
+  /nexus/vaults:
+    get:
+      operationId: getNexusVaults
+      tags: [nexus]
+      summary: Get staking and yield vaults
+      responses:
+        "200":
+          description: Yield vaults
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Vault"
+  /nexus/faucet/claim:
+    post:
+      operationId: claimNexusFaucet
+      tags: [nexus]
+      summary: Claim testnet tokens
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FaucetClaimInput"
+      responses:
+        "200":
+          description: Faucet claim result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FaucetClaim"
+        "429":
+          description: Faucet cooldown is active
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /nexus/swap/quote:
+    post:
+      operationId: createNexusSwapQuote
+      tags: [nexus]
+      summary: Simulate a token swap quote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SwapQuoteInput"
+      responses:
+        "200":
+          description: Swap quote
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SwapQuote"
+  /nexus/launchpad:
+    post:
+      operationId: createNexusLaunch
+      tags: [nexus]
+      summary: Create a launchpad draft
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LaunchInput"
+      responses:
+        "201":
+          description: Launchpad draft created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Launch"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +149,114 @@ components:
           type: string
       required:
         - status
+    NexusOverview:
+      type: object
+      required: [portfolioValue, portfolioChange, cookBalance, stakedValue, tvl, activeWallets, cookPrice, volume24h, faucetCooldown]
+      properties:
+        portfolioValue: { type: number }
+        portfolioChange: { type: number }
+        cookBalance: { type: number }
+        stakedValue: { type: number }
+        tvl: { type: number }
+        activeWallets: { type: integer }
+        cookPrice: { type: number }
+        volume24h: { type: number }
+        faucetCooldown: { type: integer }
+    Market:
+      type: object
+      required: [id, pair, tokenA, tokenB, price, change24h, volume24h, tvl, feeTier, sparkline]
+      properties:
+        id: { type: string }
+        pair: { type: string }
+        tokenA: { type: string }
+        tokenB: { type: string }
+        price: { type: number }
+        change24h: { type: number }
+        volume24h: { type: number }
+        tvl: { type: number }
+        feeTier: { type: number }
+        sparkline:
+          type: array
+          items: { type: number }
+    Activity:
+      type: object
+      required: [id, type, label, amount, token, status, timestamp, hash]
+      properties:
+        id: { type: string }
+        type: { type: string, enum: [swap, stake, claim, provide, launch] }
+        label: { type: string }
+        amount: { type: number }
+        token: { type: string }
+        status: { type: string, enum: [success, pending, failed] }
+        timestamp: { type: string }
+        hash: { type: string }
+    Vault:
+      type: object
+      required: [id, name, token, apy, tvl, lockup, userStaked, color]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        token: { type: string }
+        apy: { type: number }
+        tvl: { type: number }
+        lockup: { type: string }
+        userStaked: { type: number }
+        color: { type: string }
+    FaucetClaimInput:
+      type: object
+      required: [wallet, asset]
+      properties:
+        wallet: { type: string, minLength: 8 }
+        asset: { type: string, enum: [COOK, USDC] }
+    FaucetClaim:
+      type: object
+      required: [success, asset, amount, nextClaimIn]
+      properties:
+        success: { type: boolean }
+        asset: { type: string }
+        amount: { type: number }
+        nextClaimIn: { type: integer }
+        txHash: { type: string }
+    SwapQuoteInput:
+      type: object
+      required: [fromToken, toToken, amount, slippage]
+      properties:
+        fromToken: { type: string }
+        toToken: { type: string }
+        amount: { type: number, minimum: 0.000001 }
+        slippage: { type: number, minimum: 0.01, maximum: 50 }
+    SwapQuote:
+      type: object
+      required: [fromToken, toToken, inputAmount, outputAmount, rate, priceImpact, minimumReceived, route]
+      properties:
+        fromToken: { type: string }
+        toToken: { type: string }
+        inputAmount: { type: number }
+        outputAmount: { type: number }
+        rate: { type: number }
+        priceImpact: { type: number }
+        minimumReceived: { type: number }
+        route: { type: string }
+    LaunchInput:
+      type: object
+      required: [name, symbol, supply, creator]
+      properties:
+        name: { type: string, minLength: 2 }
+        symbol: { type: string, minLength: 2, maxLength: 8 }
+        supply: { type: number, minimum: 1 }
+        creator: { type: string, minLength: 8 }
+    Launch:
+      type: object
+      required: [id, name, symbol, status, createdAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        symbol: { type: string }
+        status: { type: string, enum: [draft, queued, deployed] }
+        createdAt: { type: string }
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
 

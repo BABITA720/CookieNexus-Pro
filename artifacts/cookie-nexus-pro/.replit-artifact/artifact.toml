@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "CookieNexus Pro"
+description = "A production-ready Web3 super-app for Cookie Chain with wallet management, swapping, staking, liquidity, launchpad, creator tools, analytics, faucet access, explorer links, and ecosystem monitoring."
+version = "1.0.0"
+id = "artifacts/cookie-nexus-pro"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 22553
+
+[services.development]
+run = "pnpm --filter @workspace/cookie-nexus-pro run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/cookie-nexus-pro", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/cookie-nexus-pro/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "22553"
+BASE_PATH = "/"

@@ -1,6 +1,6 @@
-# [Project name]
+# CookieNexus Pro
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+CookieNexus Pro is a Cookie Chain mission-control dashboard for portfolio tracking, swaps, yield, launchpad drafts, ecosystem activity, and creator tooling.
 
 ## Run & Operate
 
@@ -22,15 +22,21 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/cookie-nexus-pro/src/App.tsx` — responsive application shell and product routes.
+- `artifacts/cookie-nexus-pro/src/index.css` — CookieNexus dark amber-glass visual system.
+- `lib/api-spec/openapi.yaml` — source of truth for dashboard and chain-adapter endpoints.
+- `artifacts/api-server/src/routes/nexus.ts` — API-backed overview, markets, vaults, activity, faucet, swap quote, and launchpad flows.
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Chain-facing actions are isolated behind explicit API routes so live Cookie Chain RPC and wallet adapters can replace the simulator without changing the UI contract.
+- The first build uses typed OpenAPI-generated React Query hooks across the web artifact.
+- The interface is a single responsive mission-control shell with route-level modules rather than separate branded products.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Portfolio overview with COOK balance, staked value, TVL, market pulse, activity, network health, and testnet faucet.
+- Swap quote simulator, vault browsing, launchpad draft creation, activity history, interactive community canvas, and safety/network settings.
 
 ## User preferences
 

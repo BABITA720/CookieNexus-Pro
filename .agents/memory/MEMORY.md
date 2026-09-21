@@ -1,0 +1,1 @@
+- [Generated API client typing](api-client-dom-iterable.md) — keep `dom.iterable` enabled because generated fetch helpers use `Headers.entries()`.

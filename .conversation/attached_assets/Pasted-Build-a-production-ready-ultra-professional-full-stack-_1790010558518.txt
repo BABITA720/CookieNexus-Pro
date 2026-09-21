@@ -1,0 +1,39 @@
+Build a production-ready, ultra-professional full-stack Web3 Super-App (cApp) named "CookieNexus Pro" built on Cookie Chain (SVM). The design must feature a stunning dark glassmorphism theme, amber/cookie-gold accents, smooth animations, and be fully responsive for mobile and desktop.
+
+Please implement the following 26+ advanced features categorized into distinct modules:
+
+--- MODULE 1: WALLET & ACCOUNT MANAGEMENT ---
+1. Nightly Wallet Priority Connection: Seamless integration with Nightly wallet as the primary option and fallback Solana wallets (Phantom, Solflare).
+2. Active Wallet Display: Truncated address badge with copy-to-clipboard, connection status dot, and quick disconnect.
+3. Network / Cluster Switcher: Dropdown to switch between Cookie Chain Testnet, Mainnet, and Custom RPC.
+4. User Portfolio Net Worth Tracker: Real-time calculation of total assets (Tokens + Staked Vaults + LP shares).
+
+--- MODULE 2: ADVANCED DEFI & SWAPPING (COOKIESWAP ENGINE) ---
+5. Advanced Token Swap Interface: Fast token exchange with input/output token selector, real-time exchange rate calculation, and price impact warning.
+6. Slippage & Gas Customization Modal: Advanced settings for custom slippage tolerance (0.1%, 0.5%, 1.0%) and priority fees.
+7. Liquidity Pool (LP) Management Wizard: Interface to add and remove liquidity to pools with share-of-pool percentage calculations.
+8. Staking & Yield Farming Vaults: Dedicated earn page where users can stake COOK tokens, view live APY %, lockup periods, and claim rewards.
+9. Automated Market Making (AMM) Analytics: Live charts showing historical pool reserves, fee tier generation, and trading volume.
+10. MEV Protection & Sandwich Guard: Advanced toggle switch to route swaps through private transactions and protect against front-running bots.
+11. Automated DCA & Limit Order Bot Simulator: Advanced trading module allowing users to set recurring dollar-cost averaging or target price limit orders for COOK tokens.
+
+--- MODULE 3: CREATOR TOOLS & ECOSYSTEM (COOKIEBOX & DAS) ---
+12. Token Launchpad Wizard: A self-serve UI form to deploy new custom SPL tokens and liquidity pools on Cookie Chain.
+13. Cookie Jar Micro-Tipping / Crowdfunding: Creator vault module to send tips and support community builders with live stream stats.
+14. Community Pixel Canvas / cApp Board: An interactive collaborative pixel-art grid where every pixel interaction triggers a real/mock Cookie Chain transaction.
+15. On-Chain Prediction Market / Gaming Hub: Quick prediction module with interactive odds and betting slips.
+
+--- MODULE 4: ANALYTICS, EXPLORER & DEVELOPER TOOLING ---
+16. Real-Time TVL & Price Dashboard: Interactive trading charts for COOK token price, 24h volume, Total Value Locked, and active wallets.
+17. Live Transaction History & Activity Log Drawer: Dedicated history table showing recent transactions with status badges (Success, Pending, Failed), timestamps, and hashes.
+18. Cookiescan.io Explorer Integration: Direct external links and modal lookups for transaction hashes and block details.
+19. Developer MCP & API Status Widget: JSON-RPC node health monitor showing latency, gas prices, and Cookie DAS API connection status.
+20. Testnet Faucet & Airdrop Claimer: An interactive 'Claim Free COOK / USDC' button with a countdown timer, balance update, and success toast notifications.
+21. Multi-Wallet Watchlist & Whale Tracker: Dedicated widget to track top ecosystem wallets, token holdings, and recent large transactions.
+22. Cross-Chain Bridge Status & Route Finder: Integrated bridge tracker monitoring asset transfers between Solana and Cookie Chain.
+
+--- MODULE 5: UI/UX, SAFETY & GASLESS INFRASTRUCTURE ---
+23. Gasless Transactions (Paymaster Integration): Protocol-sponsored gas fee feature enabling seamless zero-fee testing for new users.
+24. Robust Pre-flight Error Handling: Smart error simulation modals for insufficient balances, network congestion, and failed transaction recovery.
+25. Real-Time Sound & Toast Alerts: Sleek notification system for successful swaps, stakes, and faucet claims.
+26. Interactive Help & Documentation Hub: Quick-start guide modal explaining Cookie Chain bridge, RPC endpoints, and FAQ for judges.
