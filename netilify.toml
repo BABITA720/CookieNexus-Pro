@@ -1,0 +1,3 @@
+[build]
+  command = "pnpm --filter @workspace/cookie-nexus-pro... run build"
+  publish = "artifacts/cookie-nexus-pro/dist"
