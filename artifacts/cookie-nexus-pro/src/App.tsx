@@ -61,6 +61,13 @@ import {
   PredictionHubPage,
   TokenLaunchpadPage,
 } from '@/pages/creator-ecosystem';
+import {
+  ActivityLogPage,
+  BridgePage,
+  FaucetPage,
+  GaslessSettingsPage,
+  HelpPage,
+} from '@/pages/analytics-safety';
 import { Link, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 
 const queryClient = new QueryClient();
@@ -109,6 +116,8 @@ const nav = [
   { href: '/earn', label: 'Earn', icon: TrendingUp },
   { href: '/launchpad', label: 'Launchpad', icon: Rocket },
   { href: '/jar', label: 'Cookie Jar', icon: Wallet },
+  { href: '/faucet', label: 'Faucet', icon: Droplets },
+  { href: '/bridge', label: 'Bridge', icon: Network },
   { href: '/activity', label: 'Activity', icon: History },
   { href: '/canvas', label: 'Canvas', icon: Grid3X3 },
   { href: '/predict', label: 'Predict', icon: Target },
@@ -256,7 +265,7 @@ function SettingsPage() {
 
 function Router() {
   const [location] = useLocation();
-  return <Shell><ErrorBoundary resetKey={location}><Switch><Route path="/" component={Overview} /><Route path="/swap" component={SwapPage} /><Route path="/earn" component={EarnPage} /><Route path="/launchpad" component={TokenLaunchpadPage} /><Route path="/jar" component={CookieJarPage} /><Route path="/activity" component={ActivityPage} /><Route path="/canvas" component={PixelCanvasPage} /><Route path="/predict" component={PredictionHubPage} /><Route path="/settings" component={SettingsPage} /><Route component={NotFound} /></Switch></ErrorBoundary></Shell>;
+  return <Shell><ErrorBoundary resetKey={location}><Switch><Route path="/" component={Overview} /><Route path="/swap" component={SwapPage} /><Route path="/earn" component={EarnPage} /><Route path="/launchpad" component={TokenLaunchpadPage} /><Route path="/jar" component={CookieJarPage} /><Route path="/faucet" component={FaucetPage} /><Route path="/bridge" component={BridgePage} /><Route path="/activity" component={ActivityLogPage} /><Route path="/canvas" component={PixelCanvasPage} /><Route path="/predict" component={PredictionHubPage} /><Route path="/settings" component={GaslessSettingsPage} /><Route path="/help" component={HelpPage} /><Route component={NotFound} /></Switch></ErrorBoundary></Shell>;
 }
 
 function App() {
