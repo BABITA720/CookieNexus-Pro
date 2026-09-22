@@ -55,6 +55,12 @@ import {
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
+import {
+  CookieJarPage,
+  PixelCanvasPage,
+  PredictionHubPage,
+  TokenLaunchpadPage,
+} from '@/pages/creator-ecosystem';
 import { Link, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 
 const queryClient = new QueryClient();
@@ -102,8 +108,10 @@ const nav = [
   { href: '/swap', label: 'Swap', icon: ArrowLeftRight },
   { href: '/earn', label: 'Earn', icon: TrendingUp },
   { href: '/launchpad', label: 'Launchpad', icon: Rocket },
+  { href: '/jar', label: 'Cookie Jar', icon: Wallet },
   { href: '/activity', label: 'Activity', icon: History },
   { href: '/canvas', label: 'Canvas', icon: Grid3X3 },
+  { href: '/predict', label: 'Predict', icon: Target },
 ];
 
 function Shell({ children }: { children: ReactNode }) {
@@ -248,7 +256,7 @@ function SettingsPage() {
 
 function Router() {
   const [location] = useLocation();
-  return <Shell><ErrorBoundary resetKey={location}><Switch><Route path="/" component={Overview} /><Route path="/swap" component={SwapPage} /><Route path="/earn" component={EarnPage} /><Route path="/launchpad" component={LaunchpadPage} /><Route path="/activity" component={ActivityPage} /><Route path="/canvas" component={CanvasPage} /><Route path="/settings" component={SettingsPage} /><Route component={NotFound} /></Switch></ErrorBoundary></Shell>;
+  return <Shell><ErrorBoundary resetKey={location}><Switch><Route path="/" component={Overview} /><Route path="/swap" component={SwapPage} /><Route path="/earn" component={EarnPage} /><Route path="/launchpad" component={TokenLaunchpadPage} /><Route path="/jar" component={CookieJarPage} /><Route path="/activity" component={ActivityPage} /><Route path="/canvas" component={PixelCanvasPage} /><Route path="/predict" component={PredictionHubPage} /><Route path="/settings" component={SettingsPage} /><Route component={NotFound} /></Switch></ErrorBoundary></Shell>;
 }
 
 function App() {
