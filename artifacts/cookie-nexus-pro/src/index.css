@@ -138,3 +138,24 @@ body::before {
 .animate-rise { animation: rise .55s cubic-bezier(.2,.8,.2,1) both; }
 .animate-pulse-soft { animation: pulse-soft 2.5s ease-in-out infinite; }
 .delay-1 { animation-delay: .08s; } .delay-2 { animation-delay: .16s; } .delay-3 { animation-delay: .24s; } .delay-4 { animation-delay: .32s; }
+
+[data-testid='toggle-gasless-testing'], [aria-label='Toggle transaction safety'] {
+  overflow: hidden;
+}
+
+[data-testid='toggle-gasless-testing'] > span {
+  transform: translateX(4px);
+}
+
+[data-testid='toggle-gasless-testing'][aria-checked='true'] > span {
+  transform: translateX(28px);
+}
+
+[data-testid='button-toggle-safety'] > span {
+  left: 4px;
+  transform: none;
+}
+
+[data-testid='button-toggle-safety'].bg-emerald-300 > span {
+  left: 28px;
+}

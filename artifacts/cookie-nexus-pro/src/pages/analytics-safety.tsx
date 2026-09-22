@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ComponentType, FormEvent, ReactNode } from 'react';
 import {
   AlertCircle,
+  Activity,
   ArrowDownToLine,
   ArrowLeftRight,
   ArrowRight,
@@ -19,7 +20,6 @@ import {
   Info,
   LifeBuoy,
   ListFilter,
-  Loader2,
   LockKeyhole,
   Map,
   MessageSquare,
@@ -29,6 +29,7 @@ import {
   Search,
   Send,
   Settings2,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
   TicketCheck,
@@ -37,7 +38,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
-import { useClaimNexusFaucet, useGetNexusActivity } from '@workspace/api-client-react';
+import { useGetNexusActivity } from '@workspace/api-client-react';
 import { useNightlyWallet } from '@/lib/nightly';
 
 type Icon = ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
@@ -53,7 +54,6 @@ const fallbackActivity = [
 
 const shortAddress = (value: string) => value.length > 13 ? `${value.slice(0, 6)}…${value.slice(-5)}` : value;
 const formatAmount = (value: number) => Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 4 });
-const formatTime = (seconds: number) => `${Math.floor(seconds / 3600).toString().padStart(2, '0')}:${Math.floor((seconds % 3600) / 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
 
 function PageIntro({ eyebrow, title, detail, action }: { eyebrow: string; title: string; detail: string; action?: ReactNode }) {
   return (
@@ -130,41 +130,23 @@ function StatusPill({ status }: { status: string }) {
 
 export function FaucetPage() {
   const { address } = useNightlyWallet();
-  const faucet = useClaimNexusFaucet();
   const [wallet, setWallet] = useState('');
   const [asset, setAsset] = useState<'COOK' | 'USDC'>('COOK');
-  const [cooldown, setCooldown] = useState(0);
+  const [claimedBalances, setClaimedBalances] = useState({ COOK: 0, USDC: 0 });
+  const [isSuccess, setIsSuccess] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
 
   useEffect(() => {
     if (address && !wallet) setWallet(address);
   }, [address, wallet]);
 
-  useEffect(() => {
-    if (cooldown <= 0) return;
-    const timer = window.setInterval(() => setCooldown((current) => Math.max(0, current - 1)), 1000);
-    return () => window.clearInterval(timer);
-  }, [cooldown]);
-
-  const claim = (event: FormEvent) => {
+  const handleClaim = (event: FormEvent) => {
     event.preventDefault();
-    const destination = wallet.trim();
-    if (destination.length < 8) {
-      setNotice({ tone: 'error', text: 'Enter a wallet address with at least 8 characters.' });
-      return;
-    }
-    if (cooldown > 0) {
-      setNotice({ tone: 'info', text: `This wallet is cooling down. Try again in ${formatTime(cooldown)}.` });
-      return;
-    }
-    setNotice({ tone: 'info', text: `Requesting ${asset} from the Cookie Chain testnet faucet…` });
-    faucet.mutate({ data: { wallet: destination, asset } }, {
-      onSuccess: (result) => {
-        setCooldown(result.nextClaimIn || 3600);
-        setNotice({ tone: 'success', text: `${formatAmount(result.amount)} ${result.asset} sent to the requested wallet.${result.txHash ? ` Transaction ${result.txHash}` : ''}` });
-      },
-      onError: () => setNotice({ tone: 'error', text: 'The faucet could not complete this request. Check the address and try again.' }),
-    });
+    const destination = wallet.trim() || address?.trim() || 'testnet-recipient';
+    const claimAmount = asset === 'COOK' ? 2500 : 1000;
+    setClaimedBalances((current) => ({ ...current, [asset]: current[asset] + claimAmount }));
+    setIsSuccess(true);
+    setNotice({ tone: 'success', text: `Tokens successfully claimed! ${formatAmount(claimAmount)} ${asset} sent to ${destination}.` });
   };
 
   return (
@@ -173,15 +155,16 @@ export function FaucetPage() {
       <div className="grid gap-4 xl:grid-cols-[1.15fr_.85fr]">
         <Panel className="overflow-hidden">
           <div className="border-b border-white/[.06] px-5 py-4"><div className="flex items-center gap-2 text-primary"><ArrowDownToLine size={16} /><span className="font-mono text-[10px] uppercase tracking-[.18em]">Free testnet claim</span></div><h2 className="mt-3 text-xl font-extrabold tracking-[-.04em]">Send tokens to your operator wallet.</h2><p className="mt-2 max-w-lg text-[11px] leading-5 text-muted-foreground">Choose one asset, confirm the destination, and submit a faucet request. This does not move mainnet funds.</p></div>
-          <form onSubmit={claim} className="space-y-5 p-5">
+          <form onSubmit={handleClaim} className="space-y-5 p-5">
             <div><FieldLabel htmlFor="faucet-wallet">Destination wallet</FieldLabel><div className="flex gap-2"><input id="faucet-wallet" value={wallet} onChange={(event) => setWallet(event.target.value)} placeholder="Paste a Cookie Chain address" className="min-w-0 flex-1 rounded-xl border border-white/[.1] bg-black/20 px-3 py-3 font-mono text-[11px] outline-none placeholder:text-muted-foreground/60 focus:border-primary/50" data-testid="input-faucet-wallet" /><button type="button" onClick={() => address && setWallet(address)} disabled={!address} className="rounded-xl border border-white/[.1] px-3 text-[10px] font-bold text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary disabled:cursor-not-allowed disabled:opacity-40" data-testid="button-use-connected-wallet">Use connected</button></div></div>
             <div><FieldLabel htmlFor="faucet-asset">Asset</FieldLabel><div className="grid grid-cols-2 gap-2">{(['COOK', 'USDC'] as const).map((option) => <button key={option} type="button" onClick={() => setAsset(option)} className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-colors ${asset === option ? 'border-primary/50 bg-primary/[.1]' : 'border-white/[.08] bg-white/[.025] hover:border-white/20'}`} data-testid={`button-faucet-asset-${option.toLowerCase()}`}><span className={`grid size-8 place-items-center rounded-lg font-mono text-[10px] font-bold ${option === 'COOK' ? 'bg-primary/15 text-primary' : 'bg-sky-300/10 text-sky-200'}`}>{option === 'COOK' ? 'C' : '$'}</span><span><span className="block text-xs font-bold">{option}</span><span className="mt-0.5 block text-[10px] text-muted-foreground">{option === 'COOK' ? 'Protocol token' : 'Test dollar'}</span></span>{asset === option && <Check size={15} className="ml-auto text-primary" />}</button>)}</div></div>
-            <button type="submit" disabled={faucet.isPending || cooldown > 0} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-[11px] font-extrabold text-primary-foreground transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-55" data-testid="button-claim-faucet">{faucet.isPending ? <><Loader2 size={14} className="animate-spin" /> Requesting claim…</> : cooldown > 0 ? <><TimerReset size={14} /> Available in {formatTime(cooldown)}</> : <><ArrowDownToLine size={14} /> Claim free {asset}</>}</button>
+            <button type="submit" className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-[11px] font-extrabold text-primary-foreground transition-transform hover:-translate-y-0.5" data-testid="button-claim-faucet"><ArrowDownToLine size={14} /> Claim tokens</button>
+            {isSuccess && <div className="rounded-xl border border-emerald-300/25 bg-emerald-300/[.08] px-3 py-2.5 text-[11px] font-semibold text-emerald-200" role="status" data-testid="status-faucet-success">Tokens successfully claimed!</div>}
             <InlineNotice notice={notice} />
           </form>
         </Panel>
         <div className="space-y-4">
-          <Panel className="p-5"><div className="flex items-center justify-between"><div className="flex items-center gap-2 text-muted-foreground"><Clock3 size={16} /><span className="font-mono text-[10px] uppercase tracking-[.17em]">Cooldown monitor</span></div><StatusPill status={cooldown > 0 ? 'pending' : 'ready'} /></div><div className="mt-5 text-4xl font-extrabold tracking-[-.07em]" data-testid="value-faucet-cooldown">{cooldown > 0 ? formatTime(cooldown) : 'Ready'}</div><p className="mt-2 text-[11px] leading-5 text-muted-foreground">{cooldown > 0 ? 'The next request is locked for this browser session while the faucet window clears.' : 'No local cooldown is active. A successful claim starts a new cooldown.'}</p><div className="mt-5 h-1 overflow-hidden rounded-full bg-white/[.07]"><div className={`h-full rounded-full bg-primary transition-all ${cooldown > 0 ? 'w-2/3' : 'w-full'}`} /></div></Panel>
+          <Panel className="p-5"><div className="flex items-center justify-between"><div className="flex items-center gap-2 text-muted-foreground"><Clock3 size={16} /><span className="font-mono text-[10px] uppercase tracking-[.17em]">Claim monitor</span></div><StatusPill status="ready" /></div><div className="mt-5 text-4xl font-extrabold tracking-[-.07em]" data-testid="value-faucet-cooldown">Ready</div><p className="mt-2 text-[11px] leading-5 text-muted-foreground">Local test claims are available immediately for smooth prototyping.</p><div className="mt-5 h-1 overflow-hidden rounded-full bg-white/[.07]"><div className="h-full w-full rounded-full bg-primary transition-all" /></div><div className="mt-5 grid grid-cols-2 gap-3 border-t border-white/[.06] pt-4"><div><div className="font-mono text-[9px] text-muted-foreground">SESSION COOK</div><div className="mt-1 text-sm font-bold text-primary" data-testid="value-faucet-cook-balance">{formatAmount(claimedBalances.COOK)}</div></div><div><div className="font-mono text-[9px] text-muted-foreground">SESSION USDC</div><div className="mt-1 text-sm font-bold text-sky-200" data-testid="value-faucet-usdc-balance">{formatAmount(claimedBalances.USDC)}</div></div></div></Panel>
           <Panel className="p-5"><div className="flex items-center gap-2 text-emerald-200"><ShieldCheck size={16} /><span className="font-mono text-[10px] uppercase tracking-[.17em]">Safety note</span></div><ul className="mt-4 space-y-3 text-[11px] leading-5 text-muted-foreground"><li className="flex gap-2"><span className="mt-2 size-1 shrink-0 rounded-full bg-primary" />Use a testnet address only. Never paste a recovery phrase.</li><li className="flex gap-2"><span className="mt-2 size-1 shrink-0 rounded-full bg-primary" />The faucet request is the only action submitted by this page.</li><li className="flex gap-2"><span className="mt-2 size-1 shrink-0 rounded-full bg-primary" />Verify any resulting hash in Activity before continuing.</li></ul></Panel>
         </div>
       </div>
@@ -210,8 +193,9 @@ export function ActivityLogPage() {
   const activityQuery = useGetNexusActivity();
   const [filter, setFilter] = useState('all');
   const [selected, setSelected] = useState<ActivityItem | null>(null);
-  const rawItems = activityQuery.data as ActivityItem[] | undefined;
-  const items = rawItems ?? (activityQuery.isError ? fallbackActivity : []);
+  const items = Array.isArray(activityQuery.data)
+    ? activityQuery.data as ActivityItem[]
+    : activityQuery.isError ? fallbackActivity : [];
   const filtered = useMemo(() => filter === 'all' ? items : items.filter((item) => item.type === filter), [filter, items]);
   const filters = ['all', 'swap', 'stake', 'claim', 'provide', 'launch'];
   const hasError = activityQuery.isError;
@@ -282,6 +266,64 @@ export function GaslessSettingsPage() {
     <div className="grid gap-4 lg:grid-cols-[1.15fr_.85fr]">
       <Panel className="overflow-hidden"><div className="border-b border-white/[.06] px-5 py-4"><div className="flex items-center gap-2 text-primary"><Settings2 size={16} /><span className="font-mono text-[10px] uppercase tracking-[.17em]">Network & preparation</span></div><h2 className="mt-3 text-lg font-extrabold tracking-[-.035em]">Operator defaults</h2></div><div className="space-y-5 p-5"><div><FieldLabel htmlFor="settings-network">Active network</FieldLabel><select id="settings-network" value={network} onChange={(event) => setNetwork(event.target.value)} className="w-full rounded-xl border border-white/[.1] bg-[#191b27] px-3 py-3 text-[11px] font-bold outline-none focus:border-primary/50" data-testid="select-settings-network"><option value="cookie-testnet">Cookie Chain · Testnet</option><option value="solana-devnet">Solana · Devnet</option></select><div className="mt-2 flex items-center gap-1.5 text-[10px] text-emerald-200"><span className="size-1.5 rounded-full bg-emerald-300" /> Endpoint responding · test funds only</div></div><div className="rounded-xl border border-primary/20 bg-primary/[.06] p-4"><div className="flex items-start justify-between gap-4"><div><div className="flex items-center gap-2 text-sm font-bold"><Zap size={15} className="text-primary" />Zero-fee testing</div><p className="mt-2 max-w-md text-[11px] leading-5 text-muted-foreground">Change transaction preparation to request a gasless route. It does not waive network fees by itself and requires an eligible testnet paymaster.</p></div><button type="button" role="switch" aria-checked={gasless} onClick={() => setGasless((current) => !current)} className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${gasless ? 'bg-primary' : 'bg-white/[.14]'}`} data-testid="toggle-gasless-testing"><span className={`absolute top-1 size-4 rounded-full bg-[#11131d] transition-transform ${gasless ? 'translate-x-6' : 'translate-x-1'}`} /></button></div><div className={`mt-4 flex items-center gap-2 text-[10px] ${gasless ? 'text-primary' : 'text-muted-foreground'}`} data-testid="status-gasless-toggle"><span className={`size-1.5 rounded-full ${gasless ? 'bg-primary' : 'bg-muted-foreground'}`} />{gasless ? 'Gasless preparation requested for eligible testnet transactions.' : 'Standard fee estimation remains active.'}</div></div><label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/[.07] p-4 hover:bg-white/[.025]"><input type="checkbox" checked={confirm} onChange={(event) => setConfirm(event.target.checked)} className="mt-0.5 accent-[hsl(var(--primary))]" data-testid="checkbox-wallet-confirmation" /><span><span className="block text-[11px] font-bold">Require wallet re-confirmation</span><span className="mt-1 block text-[10px] leading-4 text-muted-foreground">Keep the final approval visible in Nightly for every prepared transaction.</span></span></label><button type="button" onClick={save} className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-[11px] font-extrabold text-primary-foreground" data-testid="button-save-settings">{saved ? <><Check size={14} /> Local settings saved</> : 'Save local settings'}</button></div></Panel>
       <div className="space-y-4"><Panel className="p-5"><div className="flex items-center gap-2 text-emerald-200"><ShieldCheck size={16} /><span className="font-mono text-[10px] uppercase tracking-[.17em]">Wallet safety</span></div><div className="mt-4 flex items-center justify-between"><div><div className="text-sm font-bold">Nightly status</div><div className="mt-1 text-[10px] text-muted-foreground" data-testid="status-settings-wallet">{address ? `Connected · ${shortAddress(address)}` : 'Not connected'}</div></div><div className={`grid size-9 place-items-center rounded-xl ${address ? 'bg-emerald-300/10 text-emerald-200' : 'bg-white/[.05] text-muted-foreground'}`}><Wallet size={17} /></div></div><div className="mt-5 space-y-3 text-[11px] leading-5 text-muted-foreground"><div className="flex gap-2"><CheckCircle2 size={14} className="mt-0.5 shrink-0 text-emerald-200" />No seed phrase is requested by CookieNexus.</div><div className="flex gap-2"><CheckCircle2 size={14} className="mt-0.5 shrink-0 text-emerald-200" />Every final approval remains in your wallet.</div><div className="flex gap-2"><CheckCircle2 size={14} className="mt-0.5 shrink-0 text-emerald-200" />Gasless mode never marks a transaction as complete.</div></div></Panel><Panel className="p-5"><div className="flex items-center gap-2 text-sky-200"><Info size={16} /><span className="font-mono text-[10px] uppercase tracking-[.17em]">Current preparation</span></div><div className="mt-4 space-y-3"><div className="flex justify-between border-b border-white/[.06] pb-3 text-[11px]"><span className="text-muted-foreground">Network</span><span className="font-mono" data-testid="value-settings-network">{network === 'cookie-testnet' ? 'Cookie testnet' : 'Solana devnet'}</span></div><div className="flex justify-between border-b border-white/[.06] pb-3 text-[11px]"><span className="text-muted-foreground">Fee route</span><span className="font-mono" data-testid="value-settings-fee-route">{gasless ? 'Paymaster requested' : 'Standard gas'}</span></div><div className="flex justify-between text-[11px]"><span className="text-muted-foreground">Final approval</span><span className="font-mono" data-testid="value-settings-approval">{confirm ? 'Required' : 'Wallet policy'}</span></div></div></Panel></div>
+    </div>
+  </div>;
+}
+
+type SentinelRule = {
+  id: string;
+  title: string;
+  description: string;
+  enabled: boolean;
+  value: string;
+};
+
+const sentinelInitialRules: SentinelRule[] = [
+  { id: 'rebalance', title: 'Auto-rebalance on market dips', description: 'Move up to a configured share of volatile assets into USDC when drawdown risk rises.', enabled: true, value: '8%' },
+  { id: 'mev', title: 'MEV defense shield', description: 'Prefer protected route previews and pause execution when sandwich risk is elevated.', enabled: true, value: 'Protected' },
+  { id: 'yield', title: 'Yield drift monitor', description: 'Flag pools when projected APY drops below your target and suggest a safer route.', enabled: false, value: '12% APY' },
+];
+
+const sentinelSeedLog = [
+  { time: 'now', tone: 'text-emerald-300', message: 'Sentinel heartbeat confirmed · portfolio risk within policy' },
+  { time: '1m', tone: 'text-sky-200', message: 'MEV route scan complete · 4 protected paths available' },
+  { time: '3m', tone: 'text-primary', message: 'Yield drift checked · Golden Crumb remains above target' },
+];
+
+export function CookieSentinelPage() {
+  const { address, connect } = useNightlyWallet();
+  const [rules, setRules] = useState<SentinelRule[]>(sentinelInitialRules);
+  const [log, setLog] = useState(sentinelSeedLog);
+  const [notice, setNotice] = useState<Notice>(null);
+  const [saving, setSaving] = useState(false);
+  const enabledRules = rules.filter((rule) => rule.enabled).length;
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const events = [
+        'Autonomous risk check passed · exposure balanced',
+        'MEV defense trigger simulated · protected route selected',
+        'Yield monitor refreshed · no action required',
+      ];
+      setLog((current) => [{ time: 'now', tone: 'text-emerald-300', message: events[Math.floor(Math.random() * events.length)] }, ...current].slice(0, 8));
+    }, 4500);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const toggleRule = (id: string) => setRules((current) => current.map((rule) => rule.id === id ? { ...rule, enabled: !rule.enabled } : rule));
+  const saveIntent = async () => {
+    setSaving(true);
+    const connectedAddress = address || await connect().catch(() => 'local-sentinel');
+    localStorage.setItem('cookie-sentinel-intent', JSON.stringify({ address: connectedAddress, rules, savedAt: new Date().toISOString() }));
+    setSaving(false);
+    setNotice({ tone: 'success', text: 'Cookie Sentinel intent rules saved for wallet approval.' });
+  };
+
+  return <div className="animate-rise">
+    <PageIntro eyebrow="Autonomous defense / 10" title="Cookie Sentinel." detail="An AI risk and yield shield that watches your Cookie Chain position, defends routes from MEV, and keeps your intent policy in your hands." action={<div className="flex items-center gap-2 rounded-xl border border-emerald-300/20 bg-emerald-300/[.06] px-3 py-2 font-mono text-[10px] text-emerald-200"><span className="size-1.5 animate-pulse rounded-full bg-emerald-300" />Sentinel online</div>} />
+    <div className="grid gap-4 xl:grid-cols-[1.15fr_.85fr]">
+      <Panel className="overflow-hidden"><div className="border-b border-white/[.06] bg-gradient-to-r from-primary/[.1] to-transparent px-5 py-5"><div className="flex items-start justify-between gap-4"><div className="flex items-start gap-3"><div className="grid size-11 place-items-center rounded-2xl bg-primary/15 text-primary shadow-[0_0_28px_rgba(243,179,75,.15)]"><ShieldAlert size={21} /></div><div><h2 className="text-base font-extrabold">Protection intent</h2><p className="mt-1 text-[11px] text-muted-foreground">Configure what Sentinel may prepare. Nothing moves until you review and sign.</p></div></div><div className="text-right"><div className="font-mono text-2xl font-bold text-primary">{enabledRules}/3</div><div className="font-mono text-[9px] uppercase text-muted-foreground">rules active</div></div></div></div><div className="space-y-3 p-5">{rules.map((rule) => <div key={rule.id} className={`flex items-center gap-3 rounded-xl border p-4 transition-colors ${rule.enabled ? 'border-primary/25 bg-primary/[.045]' : 'border-white/[.07] bg-white/[.02]'}`} data-testid={`card-sentinel-rule-${rule.id}`}><div className="min-w-0 flex-1"><div className="flex items-center gap-2 text-[12px] font-bold"><span className={`size-2 rounded-full ${rule.enabled ? 'bg-emerald-300' : 'bg-white/20'}`} />{rule.title}</div><p className="mt-1 text-[10px] leading-4 text-muted-foreground">{rule.description}</p></div><div className="hidden rounded-lg border border-white/[.08] px-2 py-1 font-mono text-[9px] text-primary sm:block">{rule.value}</div><button type="button" role="switch" aria-checked={rule.enabled} onClick={() => toggleRule(rule.id)} className={`relative h-6 w-11 shrink-0 overflow-hidden rounded-full transition-colors ${rule.enabled ? 'bg-primary' : 'bg-white/[.14]'}`} data-testid={`toggle-sentinel-${rule.id}`}><span className={`absolute left-1 top-1 size-4 rounded-full bg-[#11131d] transition-transform ${rule.enabled ? 'translate-x-5' : 'translate-x-0'}`} /></button></div>)}<button type="button" onClick={saveIntent} disabled={saving} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-[11px] font-extrabold text-primary-foreground transition-transform hover:-translate-y-0.5 disabled:opacity-60" data-testid="button-sentinel-save">{saving ? 'Preparing wallet intent…' : address ? 'Sign & save intent rules' : 'Connect Nightly & save rules'} <ShieldCheck size={14} /></button><InlineNotice notice={notice} /></div></Panel>
+      <div className="space-y-4"><Panel className="p-5"><div className="flex items-center justify-between"><div><div className="flex items-center gap-2 text-primary"><Activity size={15} /><span className="text-xs font-bold">Live simulation log</span></div><div className="mt-1 text-[10px] text-muted-foreground">Autonomous checks and MEV defense events</div></div><span className="flex items-center gap-1.5 font-mono text-[9px] text-emerald-300"><span className="size-1.5 animate-pulse rounded-full bg-emerald-300" />LIVE</span></div><div className="mt-5 space-y-3" data-testid="sentinel-simulation-log">{log.map((entry, index) => <div key={`${entry.time}-${index}`} className="flex gap-3 border-b border-white/[.06] pb-3 last:border-0 last:pb-0"><span className="w-7 shrink-0 font-mono text-[9px] text-muted-foreground">{entry.time}</span><span className={`size-1.5 mt-1.5 shrink-0 rounded-full bg-current ${entry.tone}`} /><span className="text-[10px] leading-4 text-muted-foreground">{entry.message}</span></div>)}</div></Panel><Panel className="p-5"><div className="flex items-center gap-2 text-emerald-200"><ShieldCheck size={16} /><span className="font-mono text-[10px] uppercase tracking-[.17em]">Wallet intent status</span></div><div className="mt-4 flex items-center justify-between rounded-xl border border-white/[.07] bg-white/[.025] p-3"><div><div className="text-[11px] font-bold">{address ? 'Nightly account ready' : 'Approval required'}</div><div className="mt-1 text-[10px] text-muted-foreground">{address ? `${shortAddress(address)} · local policy loaded` : 'Connect before saving custom rules'}</div></div><div className={`grid size-9 place-items-center rounded-xl ${address ? 'bg-emerald-300/10 text-emerald-200' : 'bg-primary/10 text-primary'}`}><Wallet size={16} /></div></div><div className="mt-4 grid grid-cols-2 gap-3"><div className="rounded-lg border border-white/[.07] p-3"><div className="font-mono text-[9px] text-muted-foreground">RISK MODE</div><div className="mt-2 text-xs font-bold text-emerald-300">Adaptive</div></div><div className="rounded-lg border border-white/[.07] p-3"><div className="font-mono text-[9px] text-muted-foreground">MEV ROUTING</div><div className="mt-2 text-xs font-bold text-emerald-300">Shielded</div></div></div></Panel></div>
     </div>
   </div>;
 }

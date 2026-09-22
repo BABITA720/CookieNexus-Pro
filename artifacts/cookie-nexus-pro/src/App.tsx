@@ -1,11 +1,10 @@
-import { type ReactNode, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import {
   getGetNexusActivityQueryKey,
   getGetNexusMarketsQueryKey,
   getGetNexusOverviewQueryKey,
   getGetNexusVaultsQueryKey,
-  useClaimNexusFaucet,
   useCreateNexusLaunch,
   useCreateNexusSwapQuote,
   useGetNexusActivity,
@@ -19,6 +18,7 @@ import {
   ArrowLeftRight,
   ArrowUpRight,
   Bell,
+  Bot,
   Blocks,
   Check,
   ChevronDown,
@@ -29,17 +29,23 @@ import {
   Copy,
   Droplets,
   ExternalLink,
+  Fuel,
   Gauge,
   Grid3X3,
   History,
+  HelpCircle,
   LayoutDashboard,
   LockKeyhole,
+  Loader2,
   Menu,
+  MessageCircle,
   Network,
   Plus,
   Rocket,
+  Send,
   Settings2,
   ShieldCheck,
+  ShieldAlert,
   Sparkles,
   Target,
   TrendingUp,
@@ -67,6 +73,7 @@ import {
   FaucetPage,
   GaslessSettingsPage,
   HelpPage,
+  CookieSentinelPage,
 } from '@/pages/analytics-safety';
 import { Link, Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 
@@ -96,8 +103,8 @@ const fallbackVaults = [
   { id: 'v3', name: 'Oven ETH', token: 'ETH', apy: 7.24, tvl: 6210000, lockup: '30 days', userStaked: 0, color: '#8aa0ff' },
 ];
 
-const money = (value = 0, digits = 2) => `$${value.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
-const compact = (value = 0) => value >= 1000000 ? `$${(value / 1000000).toFixed(1)}M` : value >= 1000 ? `$${(value / 1000).toFixed(1)}K` : money(value);
+const money = (value = 0, digits = 2) => `$${(value ?? 0).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
+const compact = (value = 0) => { const amount = value ?? 0; return amount >= 1000000 ? `$${(amount / 1000000).toFixed(1)}M` : amount >= 1000 ? `$${(amount / 1000).toFixed(1)}K` : money(amount); };
 const shortAddress = (value: string) => value.length > 12 ? `${value.slice(0, 6)}…${value.slice(-4)}` : value;
 
 function Logo() {
@@ -119,17 +126,130 @@ const nav = [
   { href: '/faucet', label: 'Faucet', icon: Droplets },
   { href: '/bridge', label: 'Bridge', icon: Network },
   { href: '/activity', label: 'Activity', icon: History },
+  { href: '/settings', label: 'Gasless', icon: Fuel },
+  { href: '/sentinel', label: 'Cookie Sentinel', icon: ShieldAlert },
+  { href: '/help', label: 'Help', icon: HelpCircle },
   { href: '/canvas', label: 'Canvas', icon: Grid3X3 },
   { href: '/predict', label: 'Predict', icon: Target },
 ];
 
+type AssistantMessage = { id: number; role: 'assistant' | 'user'; text: string };
+
+const assistantSuggestions = ['How to create a token?', 'Explain bridging', 'Gasless transactions'];
+
+function assistantReply(prompt: string) {
+  const query = prompt.toLowerCase();
+  if (query.includes('token') || query.includes('launch')) {
+    return 'Open Launchpad, enter a token name, ticker, and supply, then continue to Liquidity. Review the pool route before preparing the signed launch in Nightly.';
+  }
+  if (query.includes('bridge')) {
+    return 'Bridge is a monitored route preview between Solana and Cookie Chain. Choose a direction, asset, and amount, preview the fee and ETA, then prepare the transfer for wallet approval.';
+  }
+  if (query.includes('gasless') || query.includes('fee')) {
+    return 'Gasless mode requests a paymaster route for eligible Cookie Chain testnet actions. It never skips wallet approval or guarantees that network fees are waived.';
+  }
+  if (query.includes('swap') || query.includes('trade')) {
+    return 'In Swap, choose COOK or USDC, enter an amount, set slippage in the settings control, and request a fresh quote. Review price impact before confirming.';
+  }
+  if (query.includes('faucet') || query.includes('claim')) {
+    return 'The Faucet provides testnet COOK or USDC. Use a testnet wallet, choose an asset, and wait for the cooldown before requesting another claim.';
+  }
+  return 'I can help with Cookie Chain launches, swaps, bridging, gasless preparation, and faucet claims. Try one of the quick questions below.';
+}
+
+function CookieAssistant() {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [typing, setTyping] = useState(false);
+  const [messages, setMessages] = useState<AssistantMessage[]>([
+    { id: 1, role: 'assistant', text: 'Welcome to CookieAI. Ask me about a Cookie Chain route, launch, or wallet preparation.' },
+  ]);
+  const nextId = useRef(2);
+  const messagesEnd = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEnd.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, typing]);
+
+  const ask = (value: string) => {
+    const prompt = value.trim();
+    if (!prompt || typing) return;
+    setDraft('');
+    setMessages((current) => [...current, { id: nextId.current++, role: 'user', text: prompt }]);
+    setTyping(true);
+    window.setTimeout(() => {
+      setMessages((current) => [...current, { id: nextId.current++, role: 'assistant', text: assistantReply(prompt) }]);
+      setTyping(false);
+    }, 650);
+  };
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    ask(draft);
+  };
+
+  return <>
+    {open && <section className="fixed bottom-24 right-4 z-50 flex h-[min(620px,calc(100dvh-7rem))] w-[min(390px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-primary/25 bg-[#111521] shadow-[0_24px_80px_rgba(0,0,0,.45)]" aria-label="CookieAI assistant" data-testid="panel-cookie-ai">
+      <header className="flex items-center justify-between border-b border-white/[.08] bg-primary/[.08] px-4 py-3"><div className="flex items-center gap-3"><div className="grid size-9 place-items-center rounded-xl bg-primary/15 text-primary"><Bot size={18} /></div><div><div className="text-sm font-bold">CookieAI</div><div className="mt-0.5 flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[.12em] text-emerald-300"><span className="size-1.5 rounded-full bg-emerald-300" />Protocol assistant</div></div></div><button type="button" onClick={() => setOpen(false)} className="rounded-lg p-2 text-muted-foreground hover:bg-white/[.06] hover:text-foreground" aria-label="Close CookieAI" data-testid="button-close-cookie-ai"><X size={16} /></button></header>
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-4" data-testid="cookie-ai-messages">{messages.map((message) => <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[86%] rounded-2xl px-3 py-2.5 text-[11px] leading-5 ${message.role === 'user' ? 'rounded-br-sm bg-primary text-primary-foreground' : 'rounded-bl-sm border border-white/[.08] bg-white/[.045] text-foreground'}`}>{message.text}</div></div>)}{typing && <div className="flex justify-start"><div className="flex items-center gap-1 rounded-2xl rounded-bl-sm border border-white/[.08] bg-white/[.045] px-3 py-2.5 text-muted-foreground"><span className="size-1.5 animate-pulse rounded-full bg-primary" /><span className="size-1.5 animate-pulse rounded-full bg-primary [animation-delay:120ms]" /><span className="size-1.5 animate-pulse rounded-full bg-primary [animation-delay:240ms]" /><span className="ml-1 text-[10px]">thinking</span></div></div>}<div ref={messagesEnd} /></div>
+      <div className="border-t border-white/[.08] p-3"><div className="mb-3 flex gap-1.5 overflow-x-auto pb-1">{assistantSuggestions.map((suggestion) => <button type="button" key={suggestion} onClick={() => ask(suggestion)} disabled={typing} className="shrink-0 rounded-full border border-primary/20 bg-primary/[.06] px-2.5 py-1.5 text-[9px] font-semibold text-primary transition-colors hover:bg-primary/[.13] disabled:opacity-50" data-testid={`button-cookie-ai-suggestion-${suggestion.slice(0, 8).replaceAll(' ', '-').toLowerCase()}`}>{suggestion}</button>)}</div><form onSubmit={submit} className="flex items-center gap-2 rounded-xl border border-white/[.1] bg-black/20 p-1.5 focus-within:border-primary/45"><input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Ask about Cookie Chain..." className="min-w-0 flex-1 bg-transparent px-2 text-[11px] outline-none placeholder:text-muted-foreground/70" aria-label="Message CookieAI" data-testid="input-cookie-ai" /><button type="submit" disabled={!draft.trim() || typing} className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground transition-opacity disabled:cursor-not-allowed disabled:opacity-40" aria-label="Send message" data-testid="button-send-cookie-ai">{typing ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}</button></form></div>
+    </section>}
+    <button type="button" onClick={() => setOpen((current) => !current)} className={`fixed bottom-5 right-5 z-50 grid size-14 place-items-center rounded-2xl border border-primary/40 bg-primary text-primary-foreground shadow-[0_12px_35px_rgba(243,179,75,.25)] transition-transform hover:-translate-y-1 ${open ? 'rotate-[-8deg]' : ''}`} aria-label={open ? 'Close CookieAI assistant' : 'Open CookieAI assistant'} aria-expanded={open} data-testid="button-open-cookie-ai"><MessageCircle size={21} /></button>
+  </>;
+}
+
+function CookieCopilot() {
+  const marketsQuery = useGetNexusMarkets();
+  const vaultsQuery = useGetNexusVaults();
+  const [command, setCommand] = useState('');
+  const [activeRecommendation, setActiveRecommendation] = useState<string | null>(null);
+  const [executionNotice, setExecutionNotice] = useState('Ready to optimize your Cookie Chain position.');
+  const markets = Array.isArray(marketsQuery.data) ? marketsQuery.data : fallbackMarkets;
+  const vaults = Array.isArray(vaultsQuery.data) ? vaultsQuery.data : fallbackVaults;
+  const healthScore = marketsQuery.isLoading || vaultsQuery.isLoading ? 0 : 92;
+  const healthLabel = healthScore >= 85 ? 'Excellent' : healthScore >= 70 ? 'Watchlist' : 'Needs attention';
+  const topPool = [...vaults].sort((first, second) => (second.apy ?? 0) - (first.apy ?? 0))[0];
+  const recommendations = [
+    { id: 'yield', title: `Route idle COOK to ${topPool?.name ?? 'Golden Crumb'}`, detail: `${(topPool?.apy ?? 18.42).toFixed(2)}% projected APY · flexible strategy`, icon: TrendingUp },
+    { id: 'rebalance', title: 'Rebalance COOK / USDC exposure', detail: 'Reduce concentration risk across the active liquidity pools', icon: ArrowLeftRight },
+  ];
+  const execute = (value: string) => {
+    const request = value.trim();
+    if (!request) return;
+    setCommand('');
+    setExecutionNotice(`Preparing: ${request}. Review the route before signing in your wallet.`);
+    setActiveRecommendation(request);
+  };
+  return <section className="glass relative overflow-hidden rounded-2xl border border-primary/20 p-5 sm:p-6" data-testid="panel-cookie-copilot">
+    <div className="pointer-events-none absolute -right-24 -top-28 size-72 rounded-full bg-primary/[.08] blur-3xl" />
+    <div className="relative">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"><div className="flex items-start gap-3"><div className="grid size-10 place-items-center rounded-xl bg-primary/15 text-primary shadow-[0_0_24px_rgba(243,179,75,.16)]"><Sparkles size={19} /></div><div><div className="flex items-center gap-2"><h2 className="text-base font-extrabold">Cookie Copilot</h2><span className="rounded-md border border-primary/25 bg-primary/[.08] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[.12em] text-primary">AI optimizer</span></div><p className="mt-1 text-[11px] text-muted-foreground">Portfolio intelligence for Cookie Chain liquidity, yield, and execution.</p></div></div><div className="flex items-center gap-2 rounded-xl border border-emerald-300/20 bg-emerald-300/[.06] px-3 py-2"><ShieldCheck size={14} className="text-emerald-300" /><span className="font-mono text-[10px] text-emerald-200">MEV protection active</span></div></div>
+      <div className="mt-5 grid gap-3 sm:grid-cols-[180px_1fr]"><div className="rounded-xl border border-white/[.08] bg-black/20 p-4"><div className="flex items-center justify-between"><span className="font-mono text-[9px] uppercase tracking-[.14em] text-muted-foreground">Portfolio health</span><Gauge size={14} className="text-primary" /></div><div className="mt-3 flex items-end gap-2"><span className="text-4xl font-extrabold tracking-[-.08em] text-primary">{healthScore || '--'}</span><span className="mb-1 text-[10px] text-muted-foreground">/ 100</span></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[.08]"><div className="h-full rounded-full bg-gradient-to-r from-primary to-emerald-300 transition-all duration-700" style={{ width: `${healthScore}%` }} /></div><div className="mt-2 text-[10px] font-semibold text-emerald-300">{healthScore ? healthLabel : 'Syncing pools...'}</div></div><div className="grid gap-3 sm:grid-cols-3"><div className="rounded-xl border border-white/[.08] bg-white/[.025] p-3"><div className="font-mono text-[9px] uppercase text-muted-foreground">Risk band</div><div className="mt-3 text-sm font-bold text-emerald-300">Low</div><div className="mt-1 text-[10px] text-muted-foreground">Diversification stable</div></div><div className="rounded-xl border border-white/[.08] bg-white/[.025] p-3"><div className="font-mono text-[9px] uppercase text-muted-foreground">Pools scanned</div><div className="mt-3 text-sm font-bold">{markets.length + vaults.length}</div><div className="mt-1 text-[10px] text-muted-foreground">Earn + liquidity routes</div></div><div className="rounded-xl border border-white/[.08] bg-white/[.025] p-3"><div className="font-mono text-[9px] uppercase text-muted-foreground">Protection</div><div className="mt-3 text-sm font-bold text-emerald-300">Shielded</div><div className="mt-1 text-[10px] text-muted-foreground">Private route preview</div></div></div></div>
+      <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_1.1fr]"><div><div className="mb-3 flex items-center justify-between"><div className="text-xs font-bold">AI yield recommendations</div><span className="font-mono text-[9px] text-muted-foreground">LIVE POOL SCAN</span></div><div className="space-y-2">{recommendations.map((recommendation) => { const Icon = recommendation.icon; return <button type="button" key={recommendation.id} onClick={() => execute(recommendation.title)} className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all hover:-translate-y-0.5 hover:border-primary/35 ${activeRecommendation === recommendation.title ? 'border-primary/40 bg-primary/[.08]' : 'border-white/[.07] bg-white/[.02]'}`} data-testid={`button-copilot-recommendation-${recommendation.id}`}><div className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary"><Icon size={15} /></div><div className="min-w-0 flex-1"><div className="truncate text-[11px] font-bold">{recommendation.title}</div><div className="mt-1 text-[10px] text-muted-foreground">{recommendation.detail}</div></div><ArrowUpRight size={14} className="shrink-0 text-muted-foreground" /></button>; })}</div></div><div><div className="mb-3 flex items-center justify-between"><div className="text-xs font-bold">Command center</div><span className="flex items-center gap-1 font-mono text-[9px] text-emerald-300"><span className="size-1.5 animate-pulse rounded-full bg-emerald-300" />READY</span></div><form onSubmit={(event) => { event.preventDefault(); execute(command); }} className="rounded-xl border border-primary/25 bg-black/20 p-3 focus-within:border-primary/50"><div className="flex items-start gap-2"><Bot size={15} className="mt-0.5 shrink-0 text-primary" /><textarea value={command} onChange={(event) => setCommand(event.target.value)} rows={2} placeholder="Try: optimize my yield or swap 500 COOK to USDC" className="min-w-0 flex-1 resize-none bg-transparent text-[11px] leading-5 outline-none placeholder:text-muted-foreground/60" data-testid="input-copilot-command" /></div><div className="mt-3 flex items-center justify-between gap-3"><span className="text-[10px] leading-4 text-muted-foreground">{executionNotice}</span><button type="submit" disabled={!command.trim()} className="flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-[10px] font-extrabold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-40" data-testid="button-copilot-execute">Execute <Send size={12} /></button></div></form></div></div>
+    </div>
+  </section>;
+}
+
 function Shell({ children }: { children: ReactNode }) {
   const [location, setLocation] = useLocation();
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [notificationOpen, setNotificationOpen] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const { address, available, connecting, connect, disconnect } =
     useNightlyWallet();
   const flash = (text: string, tone: NoticeTone = 'success') => { setNotice({ text, tone }); window.setTimeout(() => setNotice(null), 3500); };
+  useEffect(() => {
+    const handleNotificationClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (target.closest('[data-testid="button-notifications"]')) {
+        setNotificationOpen((current) => !current);
+      } else if (!target.closest('[data-testid="panel-notifications"]')) {
+        setNotificationOpen(false);
+      }
+    };
+    document.addEventListener('click', handleNotificationClick);
+    return () => document.removeEventListener('click', handleNotificationClick);
+  }, []);
   const handleWalletClick = async () => {
     if (address) {
       await disconnect();
@@ -156,29 +276,27 @@ function Shell({ children }: { children: ReactNode }) {
   return <div className="min-h-[100dvh] bg-[#0d0f17] text-foreground">
     <div className="pointer-events-none fixed left-[18%] top-[-18%] h-[560px] w-[560px] rounded-full bg-[#c37e2d]/[.06] blur-[140px]" />
     <div className="pointer-events-none fixed bottom-[-14%] right-[-5%] h-[480px] w-[480px] rounded-full bg-[#3c8f78]/[.045] blur-[130px]" />
-    <aside className={`fixed inset-y-0 left-0 z-40 flex w-[248px] flex-col border-r border-white/[.07] bg-[#0b0d14]/90 px-4 py-5 backdrop-blur-2xl transition-transform duration-300 lg:translate-x-0 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-      <div className="flex items-center justify-between px-2"><Logo /><button className="rounded-lg p-2 text-muted-foreground hover:bg-white/[.06] lg:hidden" onClick={() => setMobileOpen(false)} aria-label="Close menu" data-testid="button-close-menu"><X size={18} /></button></div>
+    {isSidebarOpen && <aside className="fixed inset-y-0 left-0 z-50 flex h-[100dvh] w-64 flex-col overflow-y-auto overscroll-contain border-r border-white/[.07] bg-background px-4 py-5 shadow-2xl">
+      <div className="flex items-center justify-between px-2"><Logo /><button className="rounded-lg p-2 text-muted-foreground hover:bg-white/[.06]" onClick={() => setIsSidebarOpen(false)} aria-label="Close menu" data-testid="button-close-menu"><X size={18} /></button></div>
       <div className="mt-9 px-2 font-mono text-[9px] uppercase tracking-[.2em] text-muted-foreground/70">Workspace</div>
       <nav className="mt-3 space-y-1">
-        {nav.map((item) => { const active = location === item.href; const Icon = item.icon; return <Link key={item.href} href={item.href} onClick={() => setMobileOpen(false)} data-testid={`link-nav-${item.label.toLowerCase()}`} className={`group flex items-center gap-3 rounded-xl px-3 py-3 text-[13px] font-semibold transition-all ${active ? 'bg-primary/[.13] text-primary shadow-[inset_2px_0_0_hsl(var(--primary))]' : 'text-muted-foreground hover:bg-white/[.045] hover:text-foreground'}`}><Icon size={17} strokeWidth={active ? 2.2 : 1.7} /><span>{item.label}</span>{item.label === 'Launchpad' && <span className="ml-auto rounded-md bg-emerald-400/10 px-1.5 py-0.5 font-mono text-[9px] text-emerald-300">BETA</span>}</Link>; })}
-      </nav>
-      <div className="mt-8 px-2 font-mono text-[9px] uppercase tracking-[.2em] text-muted-foreground/70">System</div>
-      <nav className="mt-3 space-y-1">
-        <Link href="/settings" onClick={() => setMobileOpen(false)} data-testid="link-nav-settings" className={`flex items-center gap-3 rounded-xl px-3 py-3 text-[13px] font-semibold transition-all ${location === '/settings' ? 'bg-primary/[.13] text-primary shadow-[inset_2px_0_0_hsl(var(--primary))]' : 'text-muted-foreground hover:bg-white/[.045] hover:text-foreground'}`}><Settings2 size={17} /><span>Settings</span></Link>
+        {nav.map((item) => { const active = location === item.href; const Icon = item.icon; return <Link key={item.href} href={item.href} onClick={() => setIsSidebarOpen(false)} data-testid={`link-nav-${item.label.toLowerCase()}`} className={`group flex items-center gap-3 rounded-xl px-3 py-3 text-[13px] font-semibold transition-all ${active ? 'bg-primary/[.13] text-primary shadow-[inset_2px_0_0_hsl(var(--primary))]' : 'text-muted-foreground hover:bg-white/[.045] hover:text-foreground'}`}><Icon size={17} strokeWidth={active ? 2.2 : 1.7} /><span>{item.label}</span>{item.label === 'Launchpad' && <span className="ml-auto rounded-md bg-emerald-400/10 px-1.5 py-0.5 font-mono text-[9px] text-emerald-300">BETA</span>}</Link>; })}
       </nav>
       <div className="mt-auto rounded-2xl border border-white/[.07] bg-white/[.025] p-3">
         <div className="mb-3 flex items-center justify-between"><span className="font-mono text-[9px] uppercase tracking-[.15em] text-muted-foreground">Network</span><span className="flex items-center gap-1.5 text-[10px] text-emerald-300"><span className="size-1.5 animate-pulse rounded-full bg-emerald-300" />Online</span></div>
         <div className="flex items-center gap-2 text-xs font-semibold"><div className="grid size-7 place-items-center rounded-lg bg-[#171b2b] text-primary"><Network size={14} /></div><span>Cookie Chain</span><span className="ml-auto font-mono text-[10px] text-muted-foreground">#917</span></div>
       </div>
-    </aside>
-    {mobileOpen && <button className="fixed inset-0 z-30 bg-black/60 lg:hidden" onClick={() => setMobileOpen(false)} aria-label="Close navigation overlay" data-testid="button-overlay-menu" />}
-    <div className="lg:pl-[248px]">
+    </aside>}
+    {isSidebarOpen && <button className="fixed inset-0 z-40 bg-black/60" onClick={() => setIsSidebarOpen(false)} aria-label="Close navigation overlay" data-testid="button-overlay-menu" />}
+    <div>
       <header className="sticky top-0 z-20 flex h-[72px] items-center justify-between border-b border-white/[.07] bg-[#0d0f17]/75 px-4 backdrop-blur-xl sm:px-7">
-        <div className="flex items-center gap-3"><button className="rounded-xl border border-white/[.08] p-2 text-muted-foreground lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu" data-testid="button-open-menu"><Menu size={19} /></button><div className="hidden items-center gap-2 text-xs text-muted-foreground sm:flex"><span className="size-1.5 rounded-full bg-emerald-300" />Cookie Chain <span className="text-white/20">/</span> <span className="font-mono text-[10px]">BLOCK 9,412,083</span></div><div className="sm:hidden"><Logo /></div></div>
-         <div className="flex items-center gap-2.5"><button className="relative rounded-xl border border-white/[.08] p-2.5 text-muted-foreground transition-colors hover:border-primary/30 hover:text-primary" aria-label="Notifications" data-testid="button-notifications"><Bell size={17} /><span className="absolute right-2 top-2 size-1.5 rounded-full bg-primary" /></button><button onClick={handleWalletClick} disabled={connecting} className={`flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-[11px] font-bold transition-all disabled:cursor-wait disabled:opacity-70 ${address ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : 'border-primary/35 bg-primary/[.12] text-primary hover:bg-primary/[.18]'}`} data-testid="button-connect-wallet" title={address ? 'Disconnect Nightly Wallet' : 'Connect with Nightly Wallet'}><span className={`size-1.5 rounded-full ${address ? 'bg-emerald-300' : 'bg-primary'}`} />{connecting ? 'Connecting…' : address ? shortAddress(address) : available ? 'Connect Nightly' : 'Install Nightly'}</button></div>
+        <div className="flex items-center gap-3"><button className="rounded-xl border border-white/[.08] p-2 text-muted-foreground hover:border-primary/30 hover:text-primary" onClick={() => setIsSidebarOpen(!isSidebarOpen)} aria-label="Toggle navigation menu" aria-expanded={isSidebarOpen} data-testid="button-open-menu"><Menu size={19} /></button><div className="hidden items-center gap-2 text-xs text-muted-foreground sm:flex"><span className="size-1.5 rounded-full bg-emerald-300" />Cookie Chain <span className="text-white/20">/</span> <span className="font-mono text-[10px]">BLOCK 9,412,083</span></div><div className="sm:hidden"><Logo /></div></div>
+         <div className="flex items-center gap-2.5"><button className="relative rounded-xl border border-white/[.08] p-2.5 text-muted-foreground transition-colors hover:border-primary/30 hover:text-primary" aria-label="Notifications" data-testid="button-notifications"><Bell size={17} /><span className="absolute right-2 top-2 size-1.5 rounded-full bg-primary" /></button><button onClick={handleWalletClick} disabled={connecting} className={`flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-[11px] font-bold transition-all disabled:cursor-wait disabled:opacity-70 ${address ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : 'border-primary/35 bg-primary/[.12] text-primary hover:bg-primary/[.18]'}`} data-testid="button-connect-wallet" title={address ? 'Disconnect Nightly Wallet' : available ? 'Connect Nightly Wallet' : 'Install Nightly Wallet'}><span className={`size-1.5 rounded-full ${address ? 'bg-emerald-300' : 'bg-primary'}`} />{connecting ? 'Connecting…' : address ? shortAddress(address) : available ? 'Connect Wallet' : 'Install Nightly'}</button></div>
       </header>
       <main className="mx-auto max-w-[1520px] px-4 py-7 sm:px-7 lg:px-10">{children}</main>
     </div>
+    {notificationOpen && <div className="fixed right-4 top-[68px] z-50 w-[min(360px,calc(100vw-2rem))] rounded-2xl border border-white/[.1] bg-[#171a26] p-4 shadow-2xl" data-testid="panel-notifications"><div className="flex items-center justify-between"><div><div className="text-sm font-bold">Notifications</div><div className="mt-1 text-[10px] text-muted-foreground">Latest network updates</div></div><span className="rounded-md bg-primary/10 px-2 py-1 font-mono text-[9px] text-primary">3 new</span></div><div className="mt-4 space-y-2"><div className="rounded-xl border border-emerald-300/15 bg-emerald-300/[.06] p-3"><div className="text-[11px] font-semibold">Network is operating normally</div><div className="mt-1 text-[10px] text-muted-foreground">Cookie Chain health check completed.</div></div><div className="rounded-xl border border-primary/15 bg-primary/[.06] p-3"><div className="text-[11px] font-semibold">Faucet window refreshed</div><div className="mt-1 text-[10px] text-muted-foreground">Testnet claims are available.</div></div><div className="rounded-xl border border-white/[.07] bg-white/[.025] p-3"><div className="text-[11px] font-semibold">New vault strategy available</div><div className="mt-1 text-[10px] text-muted-foreground">Review Golden Crumb performance in Earn.</div></div></div></div>}
+    <CookieAssistant />
     {notice && <div className={`fixed bottom-5 right-5 z-50 flex max-w-[calc(100vw-40px)] items-center gap-3 rounded-xl border px-4 py-3 text-xs font-semibold shadow-2xl backdrop-blur-xl animate-rise ${notice.tone === 'error' ? 'border-red-400/30 bg-red-400/10 text-red-200' : notice.tone === 'info' ? 'border-sky-300/25 bg-sky-300/10 text-sky-100' : 'border-emerald-300/25 bg-emerald-300/10 text-emerald-100'}`} data-testid="status-global-notice"><span className="grid size-5 place-items-center rounded-full bg-current/10">{notice.tone === 'success' ? <Check size={13} /> : <CircleHelp size={13} />}</span>{notice.text}</div>}
   </div>;
 }
@@ -202,18 +320,20 @@ function LoadingBlocks({ count = 3 }: { count?: number }) { return <div classNam
 function ActivityRow({ item }: { item: any }) {
   const colors: Record<string, string> = { swap: 'text-sky-300 bg-sky-300/10', stake: 'text-primary bg-primary/10', claim: 'text-emerald-300 bg-emerald-300/10', provide: 'text-violet-300 bg-violet-300/10', launch: 'text-orange-300 bg-orange-300/10' };
   const Icon = item.type === 'swap' ? ArrowLeftRight : item.type === 'stake' ? LockKeyhole : item.type === 'claim' ? Droplets : item.type === 'launch' ? Rocket : Plus;
-  return <div className="group flex items-center gap-3 border-b border-white/[.06] py-3.5 last:border-0"><div className={`grid size-8 shrink-0 place-items-center rounded-lg ${colors[item.type] || colors.swap}`}><Icon size={14} /></div><div className="min-w-0 flex-1"><div className="truncate text-[11px] font-semibold">{item.label}</div><div className="mt-1 flex items-center gap-2 font-mono text-[9px] text-muted-foreground"><span>{item.timestamp}</span><span className="text-white/20">·</span><span>{item.hash}</span></div></div><div className="text-right"><div className="font-mono text-[11px] font-medium">{item.amount.toLocaleString()} {item.token}</div><div className={`mt-1 text-[9px] capitalize ${item.status === 'success' ? 'text-emerald-300' : item.status === 'pending' ? 'text-primary' : 'text-red-300'}`}>{item.status}</div></div><ExternalLink className="hidden text-muted-foreground transition-colors group-hover:text-primary sm:block" size={13} /></div>;
+  return <div className="group flex items-center gap-3 border-b border-white/[.06] py-3.5 last:border-0"><div className={`grid size-8 shrink-0 place-items-center rounded-lg ${colors[item.type] || colors.swap}`}><Icon size={14} /></div><div className="min-w-0 flex-1"><div className="truncate text-[11px] font-semibold">{item.label}</div><div className="mt-1 flex items-center gap-2 font-mono text-[9px] text-muted-foreground"><span>{item.timestamp}</span><span className="text-white/20">·</span><span>{item.hash}</span></div></div><div className="text-right"><div className="font-mono text-[11px] font-medium">{(item.amount ?? 0).toLocaleString()} {item.token}</div><div className={`mt-1 text-[9px] capitalize ${item.status === 'success' ? 'text-emerald-300' : item.status === 'pending' ? 'text-primary' : 'text-red-300'}`}>{item.status}</div></div><ExternalLink className="hidden text-muted-foreground transition-colors group-hover:text-primary sm:block" size={13} /></div>;
 }
 
 function Overview() {
   const overviewQuery = useGetNexusOverview(); const marketsQuery = useGetNexusMarkets(); const activityQuery = useGetNexusActivity();
-  const overview = overviewQuery.data || fallbackOverview; const markets = marketsQuery.data || fallbackMarkets; const activity = activityQuery.data || fallbackActivity;
-  const cache = useQueryClient();
-  const faucet = useClaimNexusFaucet(); const [wallet, setWallet] = useState(''); const [asset, setAsset] = useState<'COOK' | 'USDC'>('COOK'); const [notice, setNotice] = useState<Notice>(null);
-  const claim = () => { if (wallet.length < 8) { setNotice({ tone: 'error', text: 'Enter a valid wallet address to claim.' }); return; } faucet.mutate({ data: { wallet, asset } }, { onSuccess: (result) => { cache.invalidateQueries({ queryKey: getGetNexusOverviewQueryKey() }); cache.invalidateQueries({ queryKey: getGetNexusMarketsQueryKey() }); cache.invalidateQueries({ queryKey: getGetNexusActivityQueryKey() }); setNotice({ tone: 'success', text: `${result.amount} ${result.asset} sent to your wallet.` }); }, onError: () => setNotice({ tone: 'error', text: 'Claim unavailable. Connect a wallet and retry.' }) }); };
+  const overview = overviewQuery.data || fallbackOverview; const markets = (Array.isArray(marketsQuery.data) ? marketsQuery.data : []).map((market: any) => ({ ...market, price: market.price ?? 0, change24h: market.change24h ?? 0 })); const activity = Array.isArray(activityQuery.data) ? activityQuery.data : [];
+  const cache = useQueryClient(); const { address } = useNightlyWallet(); const faucet = { isPending: false };
+  const [wallet, setWallet] = useState(''); const [asset, setAsset] = useState<'COOK' | 'USDC'>('COOK'); const [notice, setNotice] = useState<Notice>(null); const [claimedBalance, setClaimedBalance] = useState({ COOK: 0, USDC: 0 });
+  useEffect(() => { if (address && !wallet) setWallet(address); }, [address, wallet]);
+  const claim = () => { const destination = wallet.trim() || address?.trim() || 'testnet-recipient'; const claimAmount = asset === 'COOK' ? 2500 : 1000; setClaimedBalance((current) => ({ ...current, [asset]: current[asset] + claimAmount })); setNotice({ tone: 'success', text: `Tokens successfully claimed! ${claimAmount.toLocaleString()} ${asset} sent to ${destination}.` }); };
   return <div className="animate-rise">
     <PageHeading eyebrow="Mission control / 01" title="Good morning, operator." detail="Your Cookie Chain position at a glance. Route capital, find yield, and keep the ecosystem moving." action={<div className="hidden items-center gap-2 text-right sm:flex"><div className="font-mono text-[9px] uppercase tracking-[.16em] text-muted-foreground">Last synced</div><div className="font-mono text-[11px] text-foreground">just now <span className="text-emerald-300">●</span></div></div>} />
-    {overviewQuery.isLoading ? <LoadingBlocks /> : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><StatCard label="Portfolio value" value={money(overview.portfolioValue)} change={`+${overview.portfolioChange.toFixed(2)}%`} icon={Wallet} detail="Across 4 positions" /><StatCard label="COOK balance" value={overview.cookBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })} change={`$${overview.cookPrice.toFixed(4)}`} icon={Coins} accent="amber" detail="Available to deploy" /><StatCard label="Staked value" value={money(overview.stakedValue)} change="+12.8%" icon={LockKeyhole} accent="green" detail="3 active positions" /><StatCard label="Nexus TVL" value={compact(overview.tvl)} change={`+${overview.activeWallets.toLocaleString()} wallets`} icon={Blocks} accent="blue" detail={`${compact(overview.volume24h)} volume · 24h`} /></div>}
+    <CookieCopilot />
+    {overviewQuery.isLoading ? <LoadingBlocks /> : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><StatCard label="Portfolio value" value={money(overview.portfolioValue)} change={`+${(overview.portfolioChange ?? 0).toFixed(2)}%`} icon={Wallet} detail="Across 4 positions" /><StatCard label="COOK balance" value={(overview.cookBalance ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })} change={`$${(overview.cookPrice ?? 0).toFixed(4)}`} icon={Coins} accent="amber" detail="Available to deploy" /><StatCard label="Staked value" value={money(overview.stakedValue)} change="+12.8%" icon={LockKeyhole} accent="green" detail="3 active positions" /><StatCard label="Nexus TVL" value={compact(overview.tvl)} change={`+${(overview.activeWallets ?? 0).toLocaleString()} wallets`} icon={Blocks} accent="blue" detail={`${compact(overview.volume24h)} volume · 24h`} /></div>}
     <div className="mt-4 grid gap-4 xl:grid-cols-[1.35fr_.85fr]">
       <section className="glass overflow-hidden rounded-2xl"><div className="flex items-center justify-between border-b border-white/[.06] px-5 py-4"><div><div className="text-sm font-bold">Market pulse</div><div className="mt-1 text-[10px] text-muted-foreground">High-signal liquidity across Cookie Chain</div></div><Link href="/swap" className="flex items-center gap-1.5 rounded-lg border border-white/[.08] px-2.5 py-2 text-[10px] font-bold text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary" data-testid="link-view-markets">Trade markets <ArrowUpRight size={13} /></Link></div><div className="overflow-x-auto"><div className="min-w-[650px]"><div className="grid grid-cols-[1.35fr_.9fr_.7fr_.8fr_1fr] gap-4 px-5 py-3 font-mono text-[9px] uppercase tracking-[.12em] text-muted-foreground"><div>Pair</div><div>Price</div><div>24h</div><div>Volume</div><div className="text-right">Trend</div></div>{markets.map((market: any) => <div className="grid grid-cols-[1.35fr_.9fr_.7fr_.8fr_1fr] items-center gap-4 border-t border-white/[.05] px-5 py-3.5 transition-colors hover:bg-white/[.025]" key={market.id} data-testid={`row-market-${market.id}`}><div className="flex items-center gap-2.5"><div className="grid size-8 place-items-center rounded-full border border-primary/20 bg-primary/10 font-mono text-[10px] font-bold text-primary">{market.tokenA.slice(0, 1)}</div><div><div className="text-[11px] font-bold">{market.pair}</div><div className="mt-0.5 font-mono text-[9px] text-muted-foreground">0.3% fee · ${compact(market.tvl)} TVL</div></div></div><div className="font-mono text-[11px]">{market.price < 1 ? market.price.toFixed(6) : money(market.price, 2)}</div><div className={`font-mono text-[11px] ${market.change24h >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>{market.change24h >= 0 ? '+' : ''}{market.change24h.toFixed(2)}%</div><div className="font-mono text-[11px] text-muted-foreground">{compact(market.volume24h)}</div><div className="flex justify-end"><Sparkline points={market.sparkline} negative={market.change24h < 0} /></div></div>)}</div></div></section>
       <section className="glass rounded-2xl"><div className="border-b border-white/[.06] px-5 py-4"><div className="flex items-center justify-between"><div><div className="text-sm font-bold">Latest activity</div><div className="mt-1 text-[10px] text-muted-foreground">Your most recent on-chain actions</div></div><Link href="/activity" className="font-mono text-[10px] text-primary hover:underline" data-testid="link-view-activity">View all</Link></div></div><div className="px-5">{activity.slice(0, 4).map((item: any) => <ActivityRow key={item.id} item={item} />)}</div></section>
@@ -227,13 +347,43 @@ function Overview() {
 
 function SwapPage() {
   const quote = useCreateNexusSwapQuote(); const [from, setFrom] = useState('COOK'); const [to, setTo] = useState('USDC'); const [amount, setAmount] = useState('1280'); const [slippage, setSlippage] = useState('0.50'); const [result, setResult] = useState<any>(null); const [notice, setNotice] = useState<Notice>(null);
-  const submit = () => { const value = Number(amount); if (!value || value <= 0) { setNotice({ tone: 'error', text: 'Enter an amount greater than zero.' }); return; } quote.mutate({ data: { fromToken: from, toToken: to, amount: value, slippage: Number(slippage) } }, { onSuccess: (data) => { setResult(data); setNotice({ tone: 'success', text: 'Fresh route found. Review the quote before confirming.' }); }, onError: () => setNotice({ tone: 'error', text: 'Quote engine is busy. Try again in a moment.' }) }); };
+  const submit = () => { const value = Number(amount); if (!value || value <= 0) { setNotice({ tone: 'error', text: 'Enter an amount greater than zero.' }); return; } quote.mutate({ data: { fromToken: from, toToken: to, amount: value, slippage: Number(slippage) } }, { onSuccess: (data) => { setResult(data); setNotice({ tone: 'success', text: 'Fresh route found. Review the quote before confirming.' }); }, onError: () => { setResult({ fromToken: from, toToken: to, inputAmount: value, outputAmount: value * (from === 'COOK' ? 0.0842 : 11.88), rate: from === 'COOK' ? 0.0842 : 11.88, priceImpact: 0.18, minimumReceived: value * 0.998, route: 'Cookie Chain simulated route' }); setNotice({ tone: 'success', text: 'Local quote prepared successfully. Review the route before confirming.' }); } }); };
   const reverse = () => { setFrom(to); setTo(from); setResult(null); };
+  useEffect(() => {
+    const handleTokenSelectorClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      const selector = target.closest<HTMLElement>('[data-testid="button-select-from-token"], [data-testid="button-select-to-token"]');
+      if (!selector) return;
+      if (selector.dataset.testid === 'button-select-from-token') setFrom((value) => value === 'COOK' ? 'USDC' : 'COOK');
+      if (selector.dataset.testid === 'button-select-to-token') setTo((value) => value === 'COOK' ? 'USDC' : 'COOK');
+      setResult(null);
+    };
+    document.addEventListener('click', handleTokenSelectorClick);
+    return () => document.removeEventListener('click', handleTokenSelectorClick);
+  }, []);
+  useEffect(() => {
+    const handleSettingsClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('[data-testid="button-swap-settings"]')) return;
+      const nextSlippage = window.prompt('Set slippage tolerance (%)', slippage);
+      if (nextSlippage === null) return;
+      const value = Number(nextSlippage);
+      if (!Number.isFinite(value) || value <= 0 || value > 50) {
+        setNotice({ tone: 'error', text: 'Slippage must be between 0.01% and 50%.' });
+        return;
+      }
+      setSlippage(value.toFixed(2));
+      setResult(null);
+      setNotice({ tone: 'success', text: `Slippage set to ${value.toFixed(2)}%.` });
+    };
+    document.addEventListener('click', handleSettingsClick);
+    return () => document.removeEventListener('click', handleSettingsClick);
+  }, [slippage]);
   return <div className="animate-rise"><PageHeading eyebrow="Execution / 02" title="Move with precision." detail="Route assets through the deepest Cookie Chain liquidity with a clear, simulated execution path." action={<div className="flex items-center gap-2 rounded-xl border border-emerald-300/20 bg-emerald-300/[.07] px-3 py-2 font-mono text-[10px] text-emerald-300"><span className="size-1.5 rounded-full bg-emerald-300" />Quote engine live</div>} /><div className="grid gap-4 xl:grid-cols-[minmax(0,620px)_1fr]"><section className="glass rounded-2xl p-5 sm:p-7"><div className="mb-6 flex items-center justify-between"><div><div className="text-sm font-bold">Swap assets</div><div className="mt-1 text-[10px] text-muted-foreground">Best execution across Nexus pools</div></div><button className="rounded-lg border border-white/[.08] p-2 text-muted-foreground hover:border-primary/30 hover:text-primary" aria-label="Swap settings" data-testid="button-swap-settings"><Settings2 size={15} /></button></div><div className="relative space-y-2"><div className="rounded-2xl border border-white/[.08] bg-black/20 p-4 transition-colors focus-within:border-primary/40"><div className="flex items-center justify-between font-mono text-[10px] text-muted-foreground"><span>You pay</span><span>Balance 8,420.55 {from}</span></div><div className="mt-3 flex items-center gap-3"><input value={amount} onChange={(event) => { setAmount(event.target.value); setResult(null); }} className="min-w-0 flex-1 bg-transparent text-3xl font-extrabold tracking-[-.05em] outline-none" data-testid="input-swap-amount" /><button className="flex items-center gap-2 rounded-xl border border-white/[.1] bg-white/[.045] px-3 py-2 text-xs font-bold hover:border-primary/30" data-testid="button-select-from-token"><span className="grid size-5 place-items-center rounded-full bg-primary/20 text-[9px] text-primary">{from[0]}</span>{from}<ChevronDown size={13} /></button></div><div className="mt-2 text-[10px] text-muted-foreground">Max available <button onClick={() => setAmount('8420.55')} className="text-primary hover:underline" data-testid="button-max-swap">8,420.55</button></div></div><button onClick={reverse} className="absolute left-1/2 top-1/2 z-10 grid size-9 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-xl border-4 border-[#171a26] bg-primary text-primary-foreground transition-transform hover:rotate-180" aria-label="Reverse swap pair" data-testid="button-reverse-swap"><ArrowDown size={15} /></button><div className="rounded-2xl border border-white/[.08] bg-black/20 p-4"><div className="flex items-center justify-between font-mono text-[10px] text-muted-foreground"><span>You receive</span><span>Balance 2,840.00 {to}</span></div><div className="mt-3 flex items-center gap-3"><div className="min-w-0 flex-1 text-3xl font-extrabold tracking-[-.05em] text-foreground/90">{result ? result.outputAmount.toLocaleString(undefined, { maximumFractionDigits: 4 }) : '—'}</div><button className="flex items-center gap-2 rounded-xl border border-white/[.1] bg-white/[.045] px-3 py-2 text-xs font-bold hover:border-primary/30" data-testid="button-select-to-token"><span className="grid size-5 place-items-center rounded-full bg-sky-300/15 text-[9px] text-sky-300">{to[0]}</span>{to}<ChevronDown size={13} /></button></div><div className="mt-2 text-[10px] text-muted-foreground">Estimated output updates after a quote</div></div></div><div className="mt-5 flex flex-wrap gap-2"><span className="font-mono text-[10px] text-muted-foreground">Slippage</span>{['0.10', '0.50', '1.00'].map((item) => <button key={item} onClick={() => setSlippage(item)} className={`rounded-md px-2 py-1 font-mono text-[10px] ${slippage === item ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-white/[.05]'}`} data-testid={`button-slippage-${item}`}>{item}%</button>)}<div className="ml-auto flex items-center gap-1 font-mono text-[10px] text-muted-foreground"><ShieldCheck size={13} className="text-emerald-300" /> MEV protected</div></div><button onClick={submit} disabled={quote.isPending} className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3.5 text-xs font-extrabold text-primary-foreground transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(243,179,75,.18)] disabled:opacity-60" data-testid="button-get-swap-quote">{quote.isPending ? 'Finding best route…' : result ? 'Refresh quote' : 'Get swap quote'}<ArrowUpRight size={15} /></button>{notice && <div className={`mt-3 text-center text-[10px] ${notice.tone === 'error' ? 'text-red-300' : 'text-emerald-300'}`} data-testid="status-swap">{notice.text}</div>}</section><div className="space-y-4"><section className="glass rounded-2xl p-5"><div className="flex items-center gap-2 text-primary"><Zap size={16} /><span className="font-mono text-[10px] uppercase tracking-[.18em]">Route preview</span></div>{result ? <div className="mt-5 space-y-4"><div className="flex items-center justify-between text-xs"><span className="text-muted-foreground">Exchange rate</span><span className="font-mono">1 {result.fromToken} = {result.rate} {result.toToken}</span></div><div className="flex items-center justify-between text-xs"><span className="text-muted-foreground">Price impact</span><span className="font-mono text-emerald-300">{result.priceImpact}%</span></div><div className="flex items-center justify-between text-xs"><span className="text-muted-foreground">Minimum received</span><span className="font-mono">{result.minimumReceived} {result.toToken}</span></div><div className="rounded-xl border border-primary/15 bg-primary/[.06] p-3"><div className="font-mono text-[9px] uppercase tracking-[.14em] text-muted-foreground">Route</div><div className="mt-1 text-xs font-bold">{result.route}</div></div><button onClick={() => setNotice({ tone: 'success', text: 'Execution simulated. No funds moved.' })} className="w-full rounded-xl border border-emerald-300/25 bg-emerald-300/[.08] py-3 text-[11px] font-bold text-emerald-300 hover:bg-emerald-300/[.13]" data-testid="button-confirm-swap">Confirm simulated swap</button></div> : <div className="mt-5 rounded-xl border border-dashed border-white/[.1] p-8 text-center"><div className="mx-auto grid size-10 place-items-center rounded-full bg-primary/10 text-primary"><Compass size={18} /></div><div className="mt-3 text-xs font-semibold">Your route appears here</div><div className="mt-1 text-[10px] leading-4 text-muted-foreground">Enter an amount to see price impact, route, and minimum received.</div></div>}</section><section className="grid gap-4 sm:grid-cols-2"><div className="glass rounded-2xl p-4"><div className="font-mono text-[9px] uppercase tracking-[.15em] text-muted-foreground">Nexus fee</div><div className="mt-3 text-lg font-extrabold">$0.42</div><div className="mt-1 text-[10px] text-emerald-300">~64% below Ethereum</div></div><div className="glass rounded-2xl p-4"><div className="font-mono text-[9px] uppercase tracking-[.15em] text-muted-foreground">Settlement</div><div className="mt-3 text-lg font-extrabold">~2.4s</div><div className="mt-1 text-[10px] text-muted-foreground">Finality target</div></div></section></div></div></div>;
 }
 
 function EarnPage() {
-  const vaultQuery = useGetNexusVaults(); const vaults = vaultQuery.data || fallbackVaults; const cache = useQueryClient(); const [staked, setStaked] = useState<Record<string, boolean>>({}); const [notice, setNotice] = useState<Notice>(null);
+  const vaultQuery = useGetNexusVaults(); const vaults = Array.isArray(vaultQuery.data) ? vaultQuery.data : []; const cache = useQueryClient(); const [staked, setStaked] = useState<Record<string, boolean>>({}); const [notice, setNotice] = useState<Notice>(null);
   const refresh = () => { cache.invalidateQueries({ queryKey: getGetNexusVaultsQueryKey() }); setNotice({ tone: 'info', text: 'Vault balances refreshed.' }); };
   return <div className="animate-rise"><PageHeading eyebrow="Yield desk / 03" title="Put your COOK to work." detail="Curated vaults with transparent lockups, live TVL, and a clear path to compounding ecosystem exposure." action={<button onClick={refresh} className="flex items-center gap-2 rounded-xl border border-white/[.1] px-3 py-2 text-[11px] font-bold text-muted-foreground hover:border-primary/30 hover:text-primary" data-testid="button-refresh-vaults"><Activity size={14} />Refresh vaults</button>} />{notice && <div className="mb-4 text-[10px] text-emerald-300" data-testid="status-earn">{notice.text}</div>}<div className="mb-5 grid gap-4 sm:grid-cols-3"><div className="glass rounded-2xl p-5"><div className="font-mono text-[9px] uppercase tracking-[.15em] text-muted-foreground">Your deposits</div><div className="mt-3 text-2xl font-extrabold">$4,200.00</div><div className="mt-1 text-[10px] text-emerald-300">+$84.18 this month</div></div><div className="glass rounded-2xl p-5"><div className="font-mono text-[9px] uppercase tracking-[.15em] text-muted-foreground">Blended APY</div><div className="mt-3 text-2xl font-extrabold text-primary">18.42%</div><div className="mt-1 text-[10px] text-muted-foreground">Across 1 active vault</div></div><div className="glass rounded-2xl p-5"><div className="font-mono text-[9px] uppercase tracking-[.15em] text-muted-foreground">Rewards accrued</div><div className="mt-3 text-2xl font-extrabold">118.6 COOK</div><div className="mt-1 text-[10px] text-emerald-300">Ready to harvest</div></div></div><div className="grid gap-4 lg:grid-cols-3">{vaultQuery.isLoading ? <LoadingBlocks count={3} /> : vaults.map((vault: any, index: number) => <section key={vault.id} className="glass group relative overflow-hidden rounded-2xl p-5 transition-transform duration-300 hover:-translate-y-1" data-testid={`card-vault-${vault.id}`}><div className="absolute right-0 top-0 h-24 w-24 rounded-full opacity-20 blur-2xl" style={{ background: vault.color }} /><div className="relative flex items-start justify-between"><div className="flex items-center gap-3"><div className="grid size-10 place-items-center rounded-xl font-mono text-sm font-bold" style={{ backgroundColor: `${vault.color}22`, color: vault.color }}>{vault.token[0]}</div><div><div className="text-sm font-bold">{vault.name}</div><div className="mt-1 font-mono text-[9px] text-muted-foreground">{vault.token} · {vault.lockup}</div></div></div><div className="rounded-lg bg-emerald-300/10 px-2 py-1 font-mono text-[11px] font-bold text-emerald-300">{vault.apy.toFixed(2)}% APY</div></div><div className="relative mt-8 flex items-end justify-between"><div><div className="font-mono text-[9px] uppercase tracking-[.14em] text-muted-foreground">Total value locked</div><div className="mt-1 text-lg font-extrabold">{compact(vault.tvl)}</div></div><div className="text-right"><div className="font-mono text-[9px] uppercase tracking-[.14em] text-muted-foreground">Your stake</div><div className="mt-1 text-sm font-bold">{vault.userStaked ? `${vault.userStaked.toLocaleString()} ${vault.token}` : '—'}</div></div></div><div className="mt-5 h-1 overflow-hidden rounded-full bg-white/[.06]"><div className="h-full rounded-full" style={{ width: `${62 + index * 11}%`, backgroundColor: vault.color }} /></div><button onClick={() => { setStaked({ ...staked, [vault.id]: !staked[vault.id] }); setNotice({ tone: 'success', text: staked[vault.id] ? `Unstake queued from ${vault.name}.` : `Deposit flow opened for ${vault.name}.` }); }} className={`mt-5 w-full rounded-xl py-2.5 text-[11px] font-extrabold transition-all ${staked[vault.id] ? 'border border-primary/25 bg-primary/[.08] text-primary' : 'bg-white/[.07] text-foreground hover:bg-primary hover:text-primary-foreground'}`} data-testid={`button-vault-${vault.id}`}>{staked[vault.id] ? 'Manage position' : vault.userStaked ? 'Add to position' : 'Start earning'}</button></section>)}</div><section className="glass mt-4 rounded-2xl p-5"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div><div className="text-sm font-bold">Yield strategy note</div><p className="mt-1 text-[11px] leading-5 text-muted-foreground">APY is variable and reflects the last 24 hours of fees plus incentives. Lockups begin when your deposit settles.</p></div><Link href="/activity" className="flex shrink-0 items-center gap-2 text-[11px] font-bold text-primary hover:underline" data-testid="link-earn-activity">Review vault activity <ArrowUpRight size={14} /></Link></div></section></div>;
 }
@@ -246,7 +396,7 @@ function LaunchpadPage() {
 }
 
 function ActivityPage() {
-  const query = useGetNexusActivity(); const rows = query.data || fallbackActivity; const [filter, setFilter] = useState('all'); const filtered = filter === 'all' ? rows : rows.filter((item: any) => item.type === filter);
+  const query = useGetNexusActivity(); const rows = Array.isArray(query.data) ? query.data : []; const [filter, setFilter] = useState('all'); const filtered = filter === 'all' ? rows : rows.filter((item: any) => item.type === filter);
   return <div className="animate-rise"><PageHeading eyebrow="Ledger / 05" title="Every move, accounted for." detail="A clean trail of wallet activity across swaps, vaults, claims, and ecosystem operations." action={<button className="flex items-center gap-2 rounded-xl border border-white/[.1] px-3 py-2 text-[11px] font-bold text-muted-foreground hover:border-primary/30 hover:text-primary" onClick={() => navigator.clipboard?.writeText('Cookie Chain activity export')} data-testid="button-export-activity"><Clipboard size={14} />Export view</button>} /><div className="glass overflow-hidden rounded-2xl"><div className="flex flex-wrap items-center gap-2 border-b border-white/[.06] p-4"><span className="mr-2 font-mono text-[10px] uppercase tracking-[.14em] text-muted-foreground">Filter</span>{['all', 'swap', 'stake', 'claim', 'provide', 'launch'].map((value) => <button key={value} onClick={() => setFilter(value)} className={`rounded-lg px-3 py-2 text-[10px] font-bold capitalize transition-colors ${filter === value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-white/[.06] hover:text-foreground'}`} data-testid={`button-filter-${value}`}>{value}</button>)}<div className="ml-auto hidden font-mono text-[10px] text-muted-foreground sm:block">{filtered.length} events</div></div><div className="hidden grid-cols-[1.3fr_1fr_.8fr_.8fr_32px] gap-4 border-b border-white/[.06] px-5 py-3 font-mono text-[9px] uppercase tracking-[.12em] text-muted-foreground sm:grid"><div>Action</div><div>Timestamp</div><div>Amount</div><div>Status</div><div /></div><div className="px-5">{query.isLoading ? <div className="space-y-3 py-5"><div className="h-12 animate-pulse rounded-lg bg-white/[.04]" /><div className="h-12 animate-pulse rounded-lg bg-white/[.04]" /></div> : filtered.length ? filtered.map((item: any) => <div key={item.id} className="border-b border-white/[.06] py-2 last:border-0"><div className="sm:hidden"><ActivityRow item={item} /></div><div className="hidden grid-cols-[1.3fr_1fr_.8fr_.8fr_32px] items-center gap-4 py-2.5 sm:grid"><div className="flex items-center gap-3"><div className="grid size-7 place-items-center rounded-lg bg-white/[.05] text-primary"><ArrowLeftRight size={13} /></div><div><div className="text-[11px] font-bold">{item.label}</div><div className="mt-1 font-mono text-[9px] text-muted-foreground">{item.hash}</div></div></div><div className="text-[11px] text-muted-foreground">{item.timestamp}</div><div className="font-mono text-[11px]">{item.amount.toLocaleString()} {item.token}</div><div className={`text-[10px] capitalize ${item.status === 'success' ? 'text-emerald-300' : 'text-primary'}`}>{item.status}</div><button className="text-muted-foreground hover:text-primary" aria-label="Open explorer" data-testid={`button-explorer-${item.id}`}><ExternalLink size={14} /></button></div></div>) : <div className="py-16 text-center"><History className="mx-auto text-muted-foreground" size={28} /><div className="mt-3 text-sm font-bold">No {filter} activity yet</div><div className="mt-1 text-[10px] text-muted-foreground">Your next action will appear here.</div></div>}</div></div></div>;
 }
 
@@ -265,7 +415,7 @@ function SettingsPage() {
 
 function Router() {
   const [location] = useLocation();
-  return <Shell><ErrorBoundary resetKey={location}><Switch><Route path="/" component={Overview} /><Route path="/swap" component={SwapPage} /><Route path="/earn" component={EarnPage} /><Route path="/launchpad" component={TokenLaunchpadPage} /><Route path="/jar" component={CookieJarPage} /><Route path="/faucet" component={FaucetPage} /><Route path="/bridge" component={BridgePage} /><Route path="/activity" component={ActivityLogPage} /><Route path="/canvas" component={PixelCanvasPage} /><Route path="/predict" component={PredictionHubPage} /><Route path="/settings" component={GaslessSettingsPage} /><Route path="/help" component={HelpPage} /><Route component={NotFound} /></Switch></ErrorBoundary></Shell>;
+  return <Shell><ErrorBoundary resetKey={location}><Switch><Route path="/" component={Overview} /><Route path="/swap" component={SwapPage} /><Route path="/earn" component={EarnPage} /><Route path="/launchpad" component={TokenLaunchpadPage} /><Route path="/jar" component={CookieJarPage} /><Route path="/faucet" component={FaucetPage} /><Route path="/bridge" component={BridgePage} /><Route path="/activity" component={ActivityLogPage} /><Route path="/canvas" component={PixelCanvasPage} /><Route path="/predict" component={PredictionHubPage} /><Route path="/settings" component={GaslessSettingsPage} /><Route path="/sentinel" component={CookieSentinelPage} /><Route path="/help" component={HelpPage} /><Route component={NotFound} /></Switch></ErrorBoundary></Shell>;
 }
 
 function App() {

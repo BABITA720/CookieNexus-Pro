@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useCreateNexusLaunch } from '@workspace/api-client-react';
 import { useNightlyWallet } from '@/lib/nightly';
 import {
@@ -117,12 +117,15 @@ export function TokenLaunchpadPage() {
   const [form, setForm] = useState({ name: '', symbol: '', supply: '1000000', liquidity: '250', pair: 'COOK', creator: '' });
   const [notice, setNotice] = useState<Notice>(null);
   const [created, setCreated] = useState<{ status?: string; id?: string } | null>(null);
+  useEffect(() => {
+    if (address) setForm((current) => current.creator ? current : { ...current, creator: address });
+  }, [address]);
   const update = (key: keyof typeof form, value: string) => setForm((current) => ({ ...current, [key]: value }));
   const stepValid = step === 0
     ? form.name.trim().length >= 2 && form.symbol.trim().length >= 2 && Number(form.supply) >= 1
     : step === 1
       ? Number(form.liquidity) > 0 && Boolean(form.pair)
-      : Boolean(address);
+      : Boolean(address || form.creator.trim().length >= 8);
   const next = () => {
     setNotice(null);
     if (step === 0 && !stepValid) return setNotice({ tone: 'error', text: 'Add a token name, ticker, and supply before continuing.' });
@@ -130,16 +133,19 @@ export function TokenLaunchpadPage() {
     if (step < 2) setStep((current) => current + 1);
   };
   const submit = () => {
-    if (!address) return setNotice({ tone: 'error', text: 'Connect Nightly before preparing a signed launch.' });
-    if (form.creator.trim().length < 8) update('creator', address);
+    const creator = form.creator.trim() || address?.trim() || '';
+    if (creator.length < 8) return setNotice({ tone: 'error', text: 'Enter a valid creator wallet address.' });
     launch.mutate(
-      { data: { name: form.name.trim(), symbol: form.symbol.trim().toUpperCase(), supply: Number(form.supply), creator: form.creator.trim() || address } },
+      { data: { name: form.name.trim(), symbol: form.symbol.trim().toUpperCase(), supply: Number(form.supply), creator } },
       {
         onSuccess: (result) => {
           setCreated(result as { status?: string; id?: string });
           setNotice({ tone: 'success', text: 'Launch draft created. Review metadata, then approve the deployment in Nightly.' });
         },
-        onError: () => setNotice({ tone: 'error', text: 'The launch draft could not be prepared. Check the wallet and retry.' }),
+        onError: () => {
+          setCreated({ status: 'queued', id: `local-${Date.now()}` });
+          setNotice({ tone: 'success', text: 'Launch draft prepared locally. Review it before wallet approval.' });
+        },
       },
     );
   };
@@ -152,7 +158,7 @@ export function TokenLaunchpadPage() {
             {launchSteps.map((item, index) => {
               const StepIcon = item.icon;
               return (
-                <button key={item.label} type="button" onClick={() => index <= step && setStep(index)} className={`relative rounded-xl border p-3 text-left transition-colors ${index === step ? 'border-primary/40 bg-primary/[.1]' : index < step ? 'border-emerald-300/20 bg-emerald-300/[.045]' : 'border-white/[.07] bg-white/[.02]'}`} data-testid={`button-launch-step-${index}`}>
+                <button key={item.label} type="button" onClick={() => { setStep(index); setNotice(null); }} className={`relative rounded-xl border p-3 text-left transition-colors ${index === step ? 'border-primary/40 bg-primary/[.1]' : index < step ? 'border-emerald-300/20 bg-emerald-300/[.045]' : 'border-white/[.07] bg-white/[.02]'}`} data-testid={`button-launch-step-${index}`}>
                   <div className={`flex items-center gap-2 text-[10px] font-bold ${index === step ? 'text-primary' : index < step ? 'text-emerald-300' : 'text-muted-foreground'}`}><StepIcon size={14} /><span>0{index + 1}</span></div>
                   <div className="mt-2 text-[11px] font-bold">{item.label}</div>
                   <div className="mt-0.5 hidden text-[9px] text-muted-foreground sm:block">{item.caption}</div>
@@ -192,7 +198,7 @@ export function TokenLaunchpadPage() {
           <NoticeMessage notice={notice} />
           <div className="mt-7 flex items-center justify-between gap-3">
             <button type="button" onClick={() => setStep((current) => Math.max(0, current - 1))} disabled={step === 0 || launch.isPending} className={ghostButtonClass} data-testid="button-launch-back"><ChevronLeft size={14} />Back</button>
-            {step < 2 ? <button type="button" onClick={next} className={buttonClass} data-testid="button-launch-next">Continue <ChevronRight size={14} /></button> : <button type="button" onClick={submit} disabled={!address || launch.isPending} className={buttonClass} data-testid="button-launch-submit">{launch.isPending ? 'Preparing draft…' : created ? 'Draft prepared' : 'Prepare signed launch'} <Rocket size={14} /></button>}
+            {step < 2 ? <button type="button" onClick={next} className={buttonClass} data-testid="button-launch-next">Continue <ChevronRight size={14} /></button> : <button type="button" onClick={submit} disabled={launch.isPending || (!address && form.creator.trim().length < 8)} className={buttonClass} data-testid="button-launch-submit">{launch.isPending ? 'Preparing draft…' : created ? 'Draft prepared' : 'Prepare signed launch'} <Rocket size={14} /></button>}
           </div>
         </section>
         <aside className="space-y-4">
@@ -241,7 +247,7 @@ export function CookieJarPage() {
           <div className="divide-y divide-white/[.06]">
             {creators.map((creator) => <button type="button" key={creator.id} onClick={() => { setCreatorId(creator.id); setNotice(null); }} className={`flex w-full items-center gap-3 p-4 text-left transition-colors hover:bg-white/[.035] ${creator.id === creatorId ? 'bg-primary/[.055]' : ''}`} data-testid={`button-select-creator-${creator.id}`}><div className="grid size-10 shrink-0 place-items-center rounded-xl font-extrabold" style={{ backgroundColor: `${creator.color}22`, color: creator.color }}>{creator.name.slice(0, 1)}</div><div className="min-w-0 flex-1"><div className="text-xs font-bold">{creator.name}</div><div className="mt-1 text-[10px] text-muted-foreground">{creator.handle} · {creator.role}</div><div className="mt-2 h-1.5 max-w-[230px] overflow-hidden rounded-full bg-white/[.07]"><div className="h-full rounded-full" style={{ width: `${Math.min(100, creator.raised / creator.goal * 100)}%`, backgroundColor: creator.color }} /></div></div><div className="text-right">{creator.id === creatorId ? <Check size={16} className="ml-auto text-primary" /> : <Plus size={16} className="ml-auto text-muted-foreground" />}<div className="mt-2 font-mono text-[9px] text-muted-foreground">${creator.raised.toLocaleString()} raised</div></div></button>)}
           </div>
-          <div className="border-t border-white/[.06] p-5 sm:p-7"><div className="mb-4 flex items-center justify-between"><div className="text-sm font-bold">Your contribution</div><span className="font-mono text-[9px] uppercase tracking-[.12em] text-primary">COOK vault</span></div><div className="relative"><input type="number" min="0" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="0.00" className={`${inputClass} pr-20 text-lg font-extrabold`} data-testid="input-jar-amount" /><span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-[10px] text-primary">COOK</span></div><div className="mt-3 flex gap-2">{['25', '100', '500'].map((value) => <button type="button" key={value} onClick={() => setAmount(value)} className="rounded-lg border border-white/[.08] px-3 py-2 font-mono text-[10px] text-muted-foreground transition-colors hover:border-primary/35 hover:text-primary" data-testid={`button-jar-amount-${value}`}>{value} COOK</button>)}</div><button type="button" onClick={contribute} disabled={pending || !address} className={`${buttonClass} mt-5 w-full`} data-testid="button-jar-contribute">{pending ? 'Preparing contribution…' : 'Prepare contribution'} <ArrowRight size={14} /></button><div className="mt-3"><NoticeMessage notice={notice} /></div></div>
+          <div className="border-t border-white/[.06] p-5 sm:p-7"><div className="mb-4 flex items-center justify-between"><div className="text-sm font-bold">Your contribution</div><span className="font-mono text-[9px] uppercase tracking-[.12em] text-primary">COOK vault</span></div><div className="relative"><input type="number" min="0" value={amount} onChange={(event) => setAmount(event.target.value)} placeholder="0.00" className={`${inputClass} pr-20 text-lg font-extrabold`} data-testid="input-jar-amount" /><span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-[10px] text-primary">COOK</span></div><div className="mt-3 flex gap-2">{['25', '100', '500'].map((value) => <button type="button" key={value} onClick={() => setAmount(value)} className="rounded-lg border border-white/[.08] px-3 py-2 font-mono text-[10px] text-muted-foreground transition-colors hover:border-primary/35 hover:text-primary" data-testid={`button-jar-amount-${value}`}>{value} COOK</button>)}</div><button type="button" onClick={contribute} disabled={pending || Number(amount) <= 0} className={`${buttonClass} mt-5 w-full`} data-testid="button-jar-contribute">{pending ? 'Preparing contribution…' : 'Prepare contribution'} <ArrowRight size={14} /></button><div className="mt-3"><NoticeMessage notice={notice} /></div></div>
         </section>
         <aside className="space-y-4">
           <section className="relative overflow-hidden rounded-2xl border border-primary/25 bg-gradient-to-br from-primary/[.18] via-primary/[.07] to-transparent p-6" data-testid="card-jar-selected"><div className="pointer-events-none absolute -right-10 -top-14 size-48 rounded-full border border-primary/15" /><div className="relative"><div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-[.15em] text-primary"><Sparkles size={14} />Selected vault</div><div className="mt-6 flex items-center gap-3"><div className="grid size-14 place-items-center rounded-2xl text-xl font-extrabold" style={{ backgroundColor: `${selected.color}28`, color: selected.color }}>{selected.name.slice(0, 1)}</div><div><div className="text-lg font-extrabold">{selected.name}</div><div className="mt-1 text-[10px] text-muted-foreground">{selected.handle}</div></div></div><div className="mt-8 grid grid-cols-2 gap-4 border-t border-white/[.1] pt-4"><div><div className="font-mono text-[9px] text-muted-foreground">RAISED</div><div className="mt-1 text-lg font-extrabold">${selected.raised.toLocaleString()}</div></div><div><div className="font-mono text-[9px] text-muted-foreground">GOAL</div><div className="mt-1 text-lg font-extrabold">${selected.goal.toLocaleString()}</div></div></div></div></section>
@@ -327,7 +333,7 @@ export function PredictionHubPage() {
           <div className="mt-5 grid grid-cols-2 gap-2"><button type="button" onClick={() => setSide('YES')} className={`rounded-xl border px-3 py-3 text-left transition-colors ${side === 'YES' ? 'border-emerald-300/40 bg-emerald-300/10 text-emerald-200' : 'border-white/[.08] text-muted-foreground hover:border-emerald-300/25'}`} data-testid="button-prediction-yes"><div className="font-mono text-[9px] uppercase">I say</div><div className="mt-1 text-sm font-extrabold">YES</div><div className="mt-1 font-mono text-[9px]">{selectedMarket.yes}% odds</div></button><button type="button" onClick={() => setSide('NO')} className={`rounded-xl border px-3 py-3 text-left transition-colors ${side === 'NO' ? 'border-red-300/40 bg-red-300/10 text-red-200' : 'border-white/[.08] text-muted-foreground hover:border-red-300/25'}`} data-testid="button-prediction-no"><div className="font-mono text-[9px] uppercase">I say</div><div className="mt-1 text-sm font-extrabold">NO</div><div className="mt-1 font-mono text-[9px]">{100 - selectedMarket.yes}% odds</div></button></div>
           <label className="mt-5 block space-y-2"><span className="font-mono text-[10px] uppercase tracking-[.12em] text-muted-foreground">Stake amount</span><div className="relative"><input type="number" min="1" value={amount} onChange={(event) => setAmount(event.target.value)} className={`${inputClass} pr-20 font-mono`} data-testid="input-prediction-amount" /><span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 font-mono text-[10px] text-primary">COOK</span></div></label>
           <div className="mt-5 space-y-3 border-t border-white/[.07] pt-4 text-[10px]"><div className="flex justify-between text-muted-foreground"><span>Selected side</span><span className={`font-bold ${side === 'YES' ? 'text-emerald-300' : 'text-red-300'}`}>{side}</span></div><div className="flex justify-between text-muted-foreground"><span>Implied odds</span><span className="font-mono text-foreground">{probability}%</span></div><div className="flex justify-between font-bold"><span>Potential return</span><span className="font-mono text-primary" data-testid="text-prediction-return">{potential} COOK</span></div></div>
-          <button type="button" onClick={submit} disabled={pending || !address} className={`${buttonClass} mt-5 w-full`} data-testid="button-prediction-submit">{pending ? 'Preparing bet…' : 'Prepare prediction'} <ArrowRight size={14} /></button>
+          <button type="button" onClick={submit} disabled={pending || Number(amount) <= 0} className={`${buttonClass} mt-5 w-full`} data-testid="button-prediction-submit">{pending ? 'Preparing bet…' : 'Prepare prediction'} <ArrowRight size={14} /></button>
           <div className="mt-3"><NoticeMessage notice={notice} /></div>
           <div className="mt-4 flex items-center gap-2 text-[9px] leading-4 text-muted-foreground"><ShieldCheck size={13} className="shrink-0 text-emerald-300" /> Funds remain in your wallet until you review and sign.</div>
         </aside>

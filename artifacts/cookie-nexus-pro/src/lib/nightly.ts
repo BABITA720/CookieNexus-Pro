@@ -13,6 +13,7 @@ type NightlyAccount = {
 };
 
 type NightlySolanaProvider = {
+  connect?: () => Promise<{ publicKey?: { toString: () => string }; address?: string }>;
   features?: {
     'standard:connect'?: {
       connect: (input?: { silent?: boolean }) => Promise<{
@@ -34,7 +35,9 @@ declare global {
 }
 
 type NightlyWalletState = {
+  isConnected: boolean;
   address: string | null;
+  provider: NightlySolanaProvider | null;
   available: boolean;
   connecting: boolean;
   connect: () => Promise<string>;
@@ -50,36 +53,57 @@ function getNightlySolana() {
   return window.nightly?.solana;
 }
 
-function getConnectFeature() {
-  return getNightlySolana()?.features?.['standard:connect'];
+function getConnectFeature(provider = getNightlySolana()) {
+  return provider?.features?.['standard:connect'];
+}
+
+async function initializeNightly() {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 1500) {
+    const provider = getNightlySolana();
+    if (provider && (getConnectFeature(provider) || provider.connect)) {
+      return provider;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 50));
+  }
+  return getNightlySolana();
 }
 
 export function NightlyWalletProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
+  const [provider, setProvider] = useState<NightlySolanaProvider | null>(null);
   const [available, setAvailable] = useState(false);
   const [connecting, setConnecting] = useState(false);
 
   useEffect(() => {
-    const detect = () => setAvailable(Boolean(getNightlySolana()));
+    const detect = () => {
+      const provider = getNightlySolana();
+      setProvider(provider ?? null);
+      setAvailable(Boolean(window.nightly && provider && (getConnectFeature(provider) || provider.connect)));
+    };
     detect();
     const interval = window.setInterval(detect, 500);
     return () => window.clearInterval(interval);
   }, []);
 
   const connect = useCallback(async () => {
-    const feature = getConnectFeature();
-    if (!feature) {
-      throw new Error('Nightly Wallet is not installed or not ready yet.');
-    }
-
     setConnecting(true);
     try {
-      const result = await feature.connect({ silent: false });
-      const nextAddress = result.accounts[0]?.address;
+      const provider = await initializeNightly();
+      const feature = getConnectFeature(provider);
+      let nextAddress: string | undefined;
+      if (feature) {
+        const result = await feature.connect({ silent: false });
+        nextAddress = result.accounts[0]?.address;
+      } else if (provider?.connect) {
+        const result = await provider.connect();
+        nextAddress = result.address ?? result.publicKey?.toString();
+      }
       if (!nextAddress) {
-        throw new Error('Nightly did not return a Solana account.');
+        throw new Error('Nightly Wallet is installed but could not initialize its connection provider.');
       }
       setAddress(nextAddress);
+      setProvider(provider ?? null);
       setAvailable(true);
       return nextAddress;
     } finally {
@@ -95,7 +119,7 @@ export function NightlyWalletProvider({ children }: { children: ReactNode }) {
 
   return createElement(
     NightlyWalletContext.Provider,
-    { value: { address, available, connecting, connect, disconnect } },
+    { value: { isConnected: Boolean(address), address, provider, available, connecting, connect, disconnect } },
     children,
   );
 }
