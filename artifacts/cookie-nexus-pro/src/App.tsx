@@ -48,6 +48,10 @@ import {
   Zap,
 } from 'lucide-react';
 import { ErrorBoundary } from '@/components/error-boundary';
+import {
+  NightlyWalletProvider,
+  useNightlyWallet,
+} from '@/lib/nightly';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
@@ -105,10 +109,33 @@ const nav = [
 function Shell({ children }: { children: ReactNode }) {
   const [location, setLocation] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [connected, setConnected] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
+  const { address, available, connecting, connect, disconnect } =
+    useNightlyWallet();
   const flash = (text: string, tone: NoticeTone = 'success') => { setNotice({ text, tone }); window.setTimeout(() => setNotice(null), 3500); };
-  const connect = () => { setConnected((value) => !value); flash(connected ? 'Wallet disconnected' : 'Wallet connected · 0x71a…A91C', connected ? 'info' : 'success'); };
+  const handleWalletClick = async () => {
+    if (address) {
+      await disconnect();
+      flash('Nightly wallet disconnected', 'info');
+      return;
+    }
+    if (!available) {
+      window.open('https://wallet.nightly.app/', '_blank', 'noopener,noreferrer');
+      flash('Install Nightly Wallet, then return to connect.', 'error');
+      return;
+    }
+    try {
+      const connectedAddress = await connect();
+      flash(`Nightly connected · ${shortAddress(connectedAddress)}`);
+    } catch (error) {
+      flash(
+        error instanceof Error
+          ? error.message
+          : 'Nightly connection was cancelled.',
+        'error',
+      );
+    }
+  };
   return <div className="min-h-[100dvh] bg-[#0d0f17] text-foreground">
     <div className="pointer-events-none fixed left-[18%] top-[-18%] h-[560px] w-[560px] rounded-full bg-[#c37e2d]/[.06] blur-[140px]" />
     <div className="pointer-events-none fixed bottom-[-14%] right-[-5%] h-[480px] w-[480px] rounded-full bg-[#3c8f78]/[.045] blur-[130px]" />
@@ -131,7 +158,7 @@ function Shell({ children }: { children: ReactNode }) {
     <div className="lg:pl-[248px]">
       <header className="sticky top-0 z-20 flex h-[72px] items-center justify-between border-b border-white/[.07] bg-[#0d0f17]/75 px-4 backdrop-blur-xl sm:px-7">
         <div className="flex items-center gap-3"><button className="rounded-xl border border-white/[.08] p-2 text-muted-foreground lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open menu" data-testid="button-open-menu"><Menu size={19} /></button><div className="hidden items-center gap-2 text-xs text-muted-foreground sm:flex"><span className="size-1.5 rounded-full bg-emerald-300" />Cookie Chain <span className="text-white/20">/</span> <span className="font-mono text-[10px]">BLOCK 9,412,083</span></div><div className="sm:hidden"><Logo /></div></div>
-        <div className="flex items-center gap-2.5"><button className="relative rounded-xl border border-white/[.08] p-2.5 text-muted-foreground transition-colors hover:border-primary/30 hover:text-primary" aria-label="Notifications" data-testid="button-notifications"><Bell size={17} /><span className="absolute right-2 top-2 size-1.5 rounded-full bg-primary" /></button><button onClick={connect} className={`flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-[11px] font-bold transition-all ${connected ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : 'border-primary/35 bg-primary/[.12] text-primary hover:bg-primary/[.18]'}`} data-testid="button-connect-wallet"><span className={`size-1.5 rounded-full ${connected ? 'bg-emerald-300' : 'bg-primary'}`} />{connected ? '0x71a…A91C' : 'Connect wallet'}</button></div>
+         <div className="flex items-center gap-2.5"><button className="relative rounded-xl border border-white/[.08] p-2.5 text-muted-foreground transition-colors hover:border-primary/30 hover:text-primary" aria-label="Notifications" data-testid="button-notifications"><Bell size={17} /><span className="absolute right-2 top-2 size-1.5 rounded-full bg-primary" /></button><button onClick={handleWalletClick} disabled={connecting} className={`flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-[11px] font-bold transition-all disabled:cursor-wait disabled:opacity-70 ${address ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : 'border-primary/35 bg-primary/[.12] text-primary hover:bg-primary/[.18]'}`} data-testid="button-connect-wallet" title={address ? 'Disconnect Nightly Wallet' : 'Connect with Nightly Wallet'}><span className={`size-1.5 rounded-full ${address ? 'bg-emerald-300' : 'bg-primary'}`} />{connecting ? 'Connecting…' : address ? shortAddress(address) : available ? 'Connect Nightly' : 'Install Nightly'}</button></div>
       </header>
       <main className="mx-auto max-w-[1520px] px-4 py-7 sm:px-7 lg:px-10">{children}</main>
     </div>
@@ -214,6 +241,7 @@ function CanvasPage() {
 
 function SettingsPage() {
   const [network, setNetwork] = useState('Cookie Chain'); const [slippage, setSlippage] = useState('0.50'); const [safety, setSafety] = useState(true); const [notice, setNotice] = useState<Notice>(null);
+  const { address } = useNightlyWallet();
   const save = () => setNotice({ tone: 'success', text: 'Operator settings saved for this session.' });
   return <div className="animate-rise"><PageHeading eyebrow="Control room / 07" title="Tune your console." detail="Network preferences, execution guardrails, and wallet safety controls for confident operations." /><div className="grid gap-4 xl:grid-cols-[1fr_360px]"><section className="glass rounded-2xl p-5 sm:p-7"><div className="border-b border-white/[.06] pb-6"><div className="flex items-center gap-3"><div className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary"><Network size={17} /></div><div><div className="text-sm font-bold">Network & wallet</div><div className="mt-1 text-[10px] text-muted-foreground">Choose where your next operation will settle</div></div></div><div className="mt-5 grid gap-4 sm:grid-cols-2"><label className="space-y-2"><span className="font-mono text-[10px] uppercase tracking-[.12em] text-muted-foreground">Active network</span><select value={network} onChange={(e) => setNetwork(e.target.value)} className="w-full rounded-xl border border-white/[.09] bg-[#171a26] px-3.5 py-3 text-xs font-bold outline-none focus:border-primary/45" data-testid="select-network"><option>Cookie Chain</option><option>Cookie Chain Testnet</option></select></label><div className="space-y-2"><span className="font-mono text-[10px] uppercase tracking-[.12em] text-muted-foreground">Connected wallet</span><div className="flex items-center gap-2 rounded-xl border border-white/[.09] bg-black/20 px-3.5 py-3"><div className="size-2 rounded-full bg-emerald-300" /><span className="font-mono text-xs">0x71a…A91C</span><button className="ml-auto text-muted-foreground hover:text-primary" aria-label="Copy wallet address" onClick={() => navigator.clipboard?.writeText('0x71a…A91C')} data-testid="button-copy-wallet"><Copy size={13} /></button></div></div></div></div><div className="border-b border-white/[.06] py-6"><div className="flex items-center gap-3"><div className="grid size-9 place-items-center rounded-xl bg-sky-300/10 text-sky-300"><ArrowLeftRight size={17} /></div><div><div className="text-sm font-bold">Execution defaults</div><div className="mt-1 text-[10px] text-muted-foreground">Applied to new swap quotes</div></div></div><div className="mt-5"><div className="flex items-center justify-between"><span className="font-mono text-[10px] uppercase tracking-[.12em] text-muted-foreground">Default slippage</span><span className="font-mono text-xs font-bold text-primary">{slippage}%</span></div><input type="range" min=".1" max="3" step=".1" value={slippage} onChange={(e) => setSlippage(e.target.value)} className="mt-4 w-full accent-[hsl(var(--primary))]" data-testid="input-slippage-range" /><div className="mt-2 flex justify-between font-mono text-[9px] text-muted-foreground"><span>0.1%</span><span>Recommended</span><span>3%</span></div></div></div><div className="py-6"><div className="flex items-center justify-between gap-4"><div className="flex items-center gap-3"><div className="grid size-9 place-items-center rounded-xl bg-emerald-300/10 text-emerald-300"><ShieldCheck size={17} /></div><div><div className="text-sm font-bold">Transaction safety</div><div className="mt-1 text-[10px] text-muted-foreground">Block quotes above 2% price impact</div></div></div><button onClick={() => setSafety(!safety)} className={`relative h-6 w-11 rounded-full transition-colors ${safety ? 'bg-emerald-300' : 'bg-white/[.15]'}`} aria-label="Toggle transaction safety" data-testid="button-toggle-safety"><span className={`absolute top-1 size-4 rounded-full bg-[#10131c] transition-transform ${safety ? 'left-6' : 'left-1'}`} /></button></div></div><button onClick={save} className="rounded-xl bg-primary px-5 py-3 text-[11px] font-extrabold text-primary-foreground hover:shadow-[0_10px_25px_rgba(243,179,75,.16)]" data-testid="button-save-settings">Save settings</button>{notice && <span className="ml-3 text-[10px] text-emerald-300" data-testid="status-settings">{notice.text}</span>}</section><aside className="space-y-4"><section className="glass rounded-2xl p-5"><div className="flex items-center gap-2 text-primary"><LockKeyhole size={15} /><span className="text-xs font-bold">Session posture</span></div><div className="mt-5 space-y-4"><div className="flex items-center justify-between text-[11px]"><span className="text-muted-foreground">Wallet status</span><span className="text-emerald-300">Connected</span></div><div className="flex items-center justify-between text-[11px]"><span className="text-muted-foreground">Safety guard</span><span className={safety ? 'text-emerald-300' : 'text-primary'}>{safety ? 'Active' : 'Review'}</span></div><div className="flex items-center justify-between text-[11px]"><span className="text-muted-foreground">Network</span><span className="font-mono">{network === 'Cookie Chain' ? 'Mainnet' : 'Testnet'}</span></div></div></section><section className="glass rounded-2xl p-5"><div className="flex items-center gap-2 text-muted-foreground"><CircleHelp size={15} /><span className="text-xs font-bold">Need a hand?</span></div><p className="mt-3 text-[10px] leading-5 text-muted-foreground">Nexus never asks for your seed phrase. Verify every network prompt before signing.</p><button className="mt-4 flex items-center gap-2 text-[10px] font-bold text-primary hover:underline" data-testid="button-open-docs">Open operator docs <ExternalLink size={12} /></button></section></aside></div></div>;
 }
@@ -224,7 +252,7 @@ function Router() {
 }
 
 function App() {
-  return <QueryClientProvider client={queryClient}><TooltipProvider><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><Router /></WouterRouter><Toaster /></TooltipProvider></QueryClientProvider>;
+  return <QueryClientProvider client={queryClient}><NightlyWalletProvider><TooltipProvider><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><Router /></WouterRouter><Toaster /></TooltipProvider></NightlyWalletProvider></QueryClientProvider>;
 }
 
 export default App;
